@@ -1,0 +1,177 @@
+{
+  "schemaVersion": "1.1.0",
+  "execution": {
+    "executionId": "exec-example-0001",
+    "projectName": "calculator",
+    "startTime": "2026-06-30T14:20:00.000Z",
+    "endTime": "2026-06-30T14:20:01.500Z",
+    "duration": 1.5,
+    "status": "passed",
+    "command": "behave --format json-modern --outfile report.json",
+    "workingDirectory": "/home/user/calculator"
+  },
+  "statistics": {
+    "features": 1,
+    "scenarios": 3,
+    "steps": 12,
+    "passed": 12,
+    "failed": 0,
+    "skipped": 0,
+    "undefined": 0,
+    "pending": 0,
+    "passRate": 1.0,
+    "duration": 1.5,
+    "errorCount": 0,
+    "totalAttachments": 0,
+    "totalLogs": 0,
+    "slowestStepDuration": 0.2,
+    "avgScenarioDuration": 0.5
+  },
+  "environment": {
+    "pythonVersion": "3.12.3",
+    "behaveVersion": "1.2.6",
+    "platform": "linux",
+    "os": "Linux",
+    "osVersion": "6.5.0-14-generic",
+    "hostname": "build-agent-01",
+    "ciProvider": "github-actions",
+    "extra": {
+      "python_implementation": "CPython",
+      "machine": "x86_64",
+      "processor": "x86_64"
+    }
+  },
+  "features": [
+    {
+      "id": "feature-example-0001",
+      "name": "Calculator",
+      "description": "As a user\nI want to perform arithmetic operations\nSo that I can verify my calculations",
+      "tags": ["smoke"],
+      "filename": "examples/calculator.feature",
+      "line": 1,
+      "status": "passed",
+      "duration": 1.5,
+      "scenarios": [
+        {
+          "id": "scenario-example-0001",
+          "name": "Add two numbers",
+          "featureId": "feature-example-0001",
+          "tags": ["smoke"],
+          "status": "passed",
+          "duration": 0.5,
+          "steps": [
+            {
+              "id": "step-example-0001",
+              "keyword": "Given",
+              "text": "I have entered 5 into the calculator",
+              "status": "passed",
+              "duration": 0.1
+            },
+            {
+              "id": "step-example-0002",
+              "keyword": "And",
+              "text": "I have entered 7 into the calculator",
+              "status": "passed",
+              "duration": 0.1
+            },
+            {
+              "id": "step-example-0003",
+              "keyword": "When",
+              "text": "I press add",
+              "status": "passed",
+              "duration": 0.1
+            },
+            {
+              "id": "step-example-0004",
+              "keyword": "Then",
+              "text": "the result should be 12 on the screen",
+              "status": "passed",
+              "duration": 0.2
+            }
+          ]
+        },
+        {
+          "id": "scenario-example-0002",
+          "name": "Subtract two numbers",
+          "featureId": "feature-example-0001",
+          "tags": ["regression"],
+          "status": "passed",
+          "duration": 0.5,
+          "steps": [
+            {
+              "id": "step-example-0005",
+              "keyword": "Given",
+              "text": "I have entered 10 into the calculator",
+              "status": "passed",
+              "duration": 0.1
+            },
+            {
+              "id": "step-example-0006",
+              "keyword": "And",
+              "text": "I have entered 4 into the calculator",
+              "status": "passed",
+              "duration": 0.1
+            },
+            {
+              "id": "step-example-0007",
+              "keyword": "When",
+              "text": "I press subtract",
+              "status": "passed",
+              "duration": 0.1
+            },
+            {
+              "id": "step-example-0008",
+              "keyword": "Then",
+              "text": "the result should be 6 on the screen",
+              "status": "passed",
+              "duration": 0.2
+            }
+          ]
+        },
+        {
+          "id": "scenario-example-0003",
+          "name": "Add multiple numbers",
+          "featureId": "feature-example-0001",
+          "tags": ["outline"],
+          "status": "passed",
+          "duration": 0.5,
+          "steps": [
+            {
+              "id": "step-example-0009",
+              "keyword": "Given",
+              "text": "I have entered 1 into the calculator",
+              "status": "passed",
+              "duration": 0.1
+            },
+            {
+              "id": "step-example-0010",
+              "keyword": "And",
+              "text": "I have entered 2 into the calculator",
+              "status": "passed",
+              "duration": 0.1
+            },
+            {
+              "id": "step-example-0011",
+              "keyword": "When",
+              "text": "I press add",
+              "status": "passed",
+              "duration": 0.1
+            },
+            {
+              "id": "step-example-0012",
+              "keyword": "Then",
+              "text": "the result should be 3 on the screen",
+              "status": "passed",
+              "duration": 0.2
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "browser": "Chrome",
+    "environment": "QA",
+    "branch": "main"
+  }
+}

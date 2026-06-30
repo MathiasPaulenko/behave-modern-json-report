@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/MathiasPaulenko/behave-modern-json-report/main/schemas/execution.schema.json",
+  "title": "Behave Modern JSON Report - Execution",
+  "description": "Canonical execution model for Behave.",
+  "type": "object",
+  "required": ["schemaVersion", "execution", "statistics", "features", "metadata"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of the schema."
+    },
+    "execution": { "$ref": "#/$defs/execution" },
+    "statistics": { "$ref": "#/$defs/statistics" },
+    "environment": { "$ref": "#/$defs/environment" },
+    "features": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/feature" }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Arbitrary user-supplied metadata."
+    }
+  },
+  "$defs": {
+    "location": {
+      "type": "object",
+      "required": ["filename", "line"],
+      "additionalProperties": false,
+      "properties": {
+        "filename": { "type": "string" },
+        "line": { "type": "integer", "minimum": 0 },
+        "column": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "required": ["executionId", "status", "duration"],
+      "additionalProperties": false,
+      "properties": {
+        "executionId": { "type": "string" },
+        "projectName": { "type": ["string", "null"] },
+        "startTime": { "type": ["string", "null"] },
+        "endTime": { "type": ["string", "null"] },
+        "duration": { "type": "number", "minimum": 0 },
+        "status": { "type": "string", "enum": ["passed", "failed", "skipped", "undefined", "pending", "untested", "error", "hook_error", "cleanup_error", "xfailed", "xpassed"] },
+        "command": { "type": ["string", "null"] },
+        "workingDirectory": { "type": ["string", "null"] }
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "required": [
+        "features", "scenarios", "steps",
+        "passed", "failed", "skipped", "undefined", "pending",
+        "passRate", "duration",
+        "errorCount", "totalAttachments", "totalLogs",
+        "slowestStepDuration", "avgScenarioDuration"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "features": { "type": "integer", "minimum": 0 },
+        "scenarios": { "type": "integer", "minimum": 0 },
+        "steps": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "undefined": { "type": "integer", "minimum": 0 },
+        "pending": { "type": "integer", "minimum": 0 },
+        "passRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "duration": { "type": "number", "minimum": 0 },
+        "errorCount": { "type": "integer", "minimum": 0 },
+        "totalAttachments": { "type": "integer", "minimum": 0 },
+        "totalLogs": { "type": "integer", "minimum": 0 },
+        "slowestStepDuration": { "type": "number", "minimum": 0 },
+        "avgScenarioDuration": { "type": "number", "minimum": 0 },
+        "commonExceptionType": { "type": ["string", "null"] },
+        "byTag": {
+          "type": "object",
+          "description": "Per-tag statistics: tag name → counters.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "count": { "type": "integer" },
+              "duration": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pythonVersion": { "type": ["string", "null"] },
+        "behaveVersion": { "type": ["string", "null"] },
+        "platform": { "type": ["string", "null"] },
+        "os": { "type": ["string", "null"] },
+        "osVersion": { "type": ["string", "null"] },
+        "hostname": { "type": ["string", "null"] },
+        "ciProvider": { "type": ["string", "null"] },
+        "cwd": { "type": ["string", "null"] },
+        "command": { "type": ["string", "null"] },
+        "user": { "type": ["string", "null"] },
+        "cpuCount": { "type": ["integer", "null"], "minimum": 0 },
+        "memoryMb": { "type": ["integer", "null"], "minimum": 0 },
+        "gitBranch": { "type": ["string", "null"] },
+        "gitCommit": { "type": ["string", "null"] },
+        "gitRemote": { "type": ["string", "null"] },
+        "extra": { "type": "object" }
+      }
+    },
+    "background": {
+      "type": "object",
+      "required": ["id"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "keyword": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" },
+        "steps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/step" }
+        }
+      }
+    },
+    "feature": {
+      "type": "object",
+      "required": ["id", "name", "status", "duration", "scenarios"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": ["string", "null"] },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "filename": { "type": ["string", "null"] },
+        "line": { "type": ["integer", "null"], "minimum": 0 },
+        "status": { "type": "string", "enum": ["passed", "failed", "skipped", "undefined", "pending", "untested", "error", "hook_error", "cleanup_error", "xfailed", "xpassed"] },
+        "duration": { "type": "number", "minimum": 0 },
+        "scenarios": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/scenario" }
+        },
+        "background": { "$ref": "#/$defs/background" }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "required": ["id", "name", "featureId", "status", "duration", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "featureId": { "type": "string" },
+        "description": { "type": ["string", "null"] },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "examples": { "type": "array" },
+        "location": { "$ref": "#/$defs/location" },
+        "status": { "type": "string", "enum": ["passed", "failed", "skipped", "undefined", "pending", "untested", "error", "hook_error", "cleanup_error", "xfailed", "xpassed"] },
+        "duration": { "type": "number", "minimum": 0 },
+        "rule": { "type": ["string", "null"] },
+        "isOutline": { "type": "boolean" },
+        "outlineName": { "type": ["string", "null"] },
+        "background": { "$ref": "#/$defs/background" },
+        "retry": { "type": "object" },
+        "steps": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/step" }
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "required": ["id", "keyword", "text", "status", "duration"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "keyword": { "type": "string" },
+        "text": { "type": "string" },
+        "status": { "type": "string", "enum": ["passed", "failed", "skipped", "undefined", "pending", "untested", "error", "hook_error", "cleanup_error", "xfailed", "xpassed"] },
+        "duration": { "type": "number", "minimum": 0 },
+        "location": { "$ref": "#/$defs/location" },
+        "error": { "$ref": "#/$defs/error" },
+        "docString": { "$ref": "#/$defs/docString" },
+        "dataTable": { "$ref": "#/$defs/dataTable" },
+        "attachments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/attachment" }
+        },
+        "logs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/stepLog" }
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["id", "type", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "message": { "type": "string" },
+        "traceback": { "type": ["string", "null"] },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "docString": {
+      "type": "object",
+      "required": ["content"],
+      "additionalProperties": false,
+      "properties": {
+        "content": { "type": "string" },
+        "contentType": { "type": ["string", "null"] },
+        "line": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "dataTable": {
+      "type": "object",
+      "required": ["rows"],
+      "additionalProperties": false,
+      "properties": {
+        "headers": { "type": ["array", "null"], "items": { "type": "string" } },
+        "rows": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dataTableRow" }
+        }
+      }
+    },
+    "dataTableRow": {
+      "type": "object",
+      "required": ["cells"],
+      "additionalProperties": false,
+      "properties": {
+        "cells": { "type": "array", "items": { "type": "string" } },
+        "line": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "attachment": {
+      "type": "object",
+      "required": ["id", "name", "mimeType", "encoding"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "encoding": { "type": "string", "enum": ["raw", "base64", "external"] },
+        "content": { "type": ["string", "null"] },
+        "path": { "type": ["string", "null"] },
+        "url": { "type": ["string", "null"] },
+        "size": { "type": ["integer", "null"], "minimum": 0 },
+        "timestamp": { "type": ["string", "null"] }
+      }
+    },
+    "stepLog": {
+      "type": "object",
+      "required": ["timestamp", "level", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "timestamp": { "type": "string" },
+        "level": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    }
+  }
+}
