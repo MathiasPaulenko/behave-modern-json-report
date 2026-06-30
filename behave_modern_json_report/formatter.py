@@ -117,9 +117,11 @@ def _metadata_from_config(config: Any) -> dict[str, Any]:
 
 
 # Keys that behave itself puts in userdata; we don't want them in report metadata.
-_USERDATA_RESERVED = frozenset({
-    "mjr.project_name",
-})
+_USERDATA_RESERVED = frozenset(
+    {
+        "mjr.project_name",
+    }
+)
 
 
 def _userdata_from_config(config: Any) -> dict[str, Any]:
@@ -148,7 +150,7 @@ def _userdata_from_config(config: Any) -> dict[str, Any]:
             continue
         if str_key in _USERDATA_RESERVED:
             continue
-        result[str_key[len("mjr."):]] = value
+        result[str_key[len("mjr.") :]] = value
     return result
 
 

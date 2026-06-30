@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **CucumberJSONFormatter**: new Behave formatter (`cucumber-json`) that outputs de facto Cucumber JSON report format for compatibility with cucumber-reporting, multiple-cucumber-html-reporter, ReportPortal, Jenkins plugins, and other tools that consume Cucumber JSON.
+- **CucumberSerializer**: model-to-Cucumber JSON serializer with configurable options (pretty/compact, embed attachments, include output, include backgrounds, duration in nanos).
+- **serialize_cucumber()**: convenience function for programmatic use.
+- 22 new tests covering Cucumber serializer and formatter.
+
 ## [1.1.0] - 2025-01-15
 
 ### Added

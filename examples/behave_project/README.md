@@ -36,6 +36,18 @@ PYTHONPATH=../../ behave --format behave_modern_json_report:ModernJSONFormatter 
     --outfile report.json --no-color features
 ```
 
+### Cucumber JSON output
+
+You can also generate a Cucumber-compatible JSON report:
+
+```bash
+cd examples/behave_project
+PYTHONPATH=../../ behave --format behave_modern_json_report:CucumberJSONFormatter \
+    --outfile cucumber.json --no-color features
+```
+
+The Cucumber JSON format is compatible with cucumber-reporting, multiple-cucumber-html-reporter, ReportPortal, and other tools that consume Cucumber JSON.
+
 The JSON report is written to `report.json` in the current directory.
 
 ## Metadata via `behave.ini`
@@ -68,4 +80,5 @@ behave --userdata "mjr.branch=hotfix,mjr.build_id=99" features
 - **Attachments** — `environment.py` attaches JSON context and failure details via `attach_json` / `attach_text`
 - **Logging** — `environment.py` logs scenario lifecycle events via `log()`
 - **Metadata** — `behave.ini` demonstrates `mjr.*` userdata injection into report metadata
+- **Cucumber JSON** — `CucumberJSONFormatter` produces Cucumber-compatible JSON with backgrounds, outlines, embeddings, and output
 - **Multiple features** — 3 feature files with 15 scenarios and 70 steps

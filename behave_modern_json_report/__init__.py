@@ -20,6 +20,12 @@ from __future__ import annotations
 
 from .attach import attach_file, attach_json, attach_screenshot, attach_text, log
 from .collector import Collector
+from .cucumber_formatter import CucumberJSONFormatter
+from .cucumber_serializer import (
+    CucumberSerializer,
+    CucumberSerializerOptions,
+    serialize_cucumber,
+)
 from .formatter import ModernJSONFormatter
 from .models import (
     Attachment,
@@ -74,9 +80,13 @@ __all__ = [
     "validate_dict",
     "validate_json",
     "validate_report",
-    # collector + formatter
+    # collector + formatters
     "Collector",
+    "CucumberJSONFormatter",
+    "CucumberSerializer",
+    "CucumberSerializerOptions",
     "ModernJSONFormatter",
+    "serialize_cucumber",
     # attach helpers
     "attach_file",
     "attach_json",

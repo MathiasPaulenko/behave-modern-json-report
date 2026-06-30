@@ -127,6 +127,70 @@ fmt = ModernJSONFormatter(
 
 ---
 
+## `CucumberJSONFormatter`
+
+```python
+from behave_modern_json_report.cucumber_formatter import CucumberJSONFormatter
+```
+
+Produces a Cucumber-compatible JSON report (de facto standard) for integration
+with tools like cucumber-reporting, multiple-cucumber-html-reporter, ReportPortal,
+and Jenkins plugins.
+
+Used as a Behave formatter:
+
+```bash
+behave --format behave_modern_json_report:CucumberJSONFormatter --outfile cucumber.json
+```
+
+Or programmatically:
+
+```python
+fmt = CucumberJSONFormatter(
+    stream=open("cucumber.json", "w"),
+    options=CucumberSerializerOptions(pretty=True),
+    project_name="my-app",
+    metadata={"branch": "main"},
+)
+```
+
+---
+
+## `CucumberSerializerOptions`
+
+```python
+CucumberSerializerOptions(
+    pretty=True,
+    indent=2,
+    sort_keys=False,
+    ensure_ascii=False,
+    embed_attachments=True,
+    include_output=True,
+    include_hooks=True,
+    include_background=True,
+    duration_in_nanos=True,
+)
+```
+
+---
+
+## `CucumberSerializer`
+
+```python
+CucumberSerializer(options).to_list(report) -> list[dict]
+CucumberSerializer(options).to_json(report) -> str
+```
+
+Also available as a convenience function:
+
+```python
+from behave_modern_json_report import serialize_cucumber
+
+json_str = serialize_cucumber(report, options=CucumberSerializerOptions(pretty=False))
+```
+
+---
+
 ## Models
 
 All models are dataclasses defined in `models.py`:
@@ -145,3 +209,4 @@ All models are dataclasses defined in `models.py`:
 - `Location` — source location
 - `StepLog` — log entry
 - `Metadata` — arbitrary metadata container
+- `Background` — Gherkin background

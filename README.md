@@ -37,10 +37,11 @@ It is the data foundation for:
 - **Rich statistics** — pass rate, counts, duration, error count, total attachments/logs, slowest step, avg scenario, common exception type, per-tag breakdown
 - **Rich environment** — Python, Behave, platform, OS, hostname, CI provider, cwd, command, user, CPU count, memory, git branch/commit/remote
 - **Arbitrary metadata** — inject domain-specific context via `[behave.userdata]` with `mjr.*` keys
+- **Cucumber JSON format** — `CucumberJSONFormatter` outputs de facto Cucumber JSON for compatibility with cucumber-reporting, ReportPortal, Jenkins plugins, and more
 - **Zero Behave dependency** in the serializer — the JSON model is portable
 - **JSON Schema** validation with helpful error messages
 - **Configurable** — pretty/compact, embed/exclude attachments, exclude passed scenarios
-- **Production-ready** — 101 tests, lint, type-check, CI
+- **Production-ready** — 123 tests, lint, type-check, CI
 
 ## Installation
 
@@ -68,11 +69,22 @@ pip install behave-modern-json-report[dev]
 
 ## Quick Start
 
-### As a Behave formatter
+### As a Behave formatter (modern JSON)
 
 ```bash
 behave --format behave_modern_json_report:ModernJSONFormatter --outfile report.json
 ```
+
+### As a Behave formatter (Cucumber JSON)
+
+```bash
+behave --format behave_modern_json_report:CucumberJSONFormatter --outfile cucumber.json
+```
+
+The Cucumber JSON format is compatible with tools that consume Cucumber JSON reports:
+- [cucumber-reporting](https://github.com/damianszczepanik/cucumber-reporting) (Jenkins plugin)
+- [multiple-cucumber-html-reporter](https://github.com/wswebcreation/multiple-cucumber-html-reporter)
+- ReportPortal, Allure, and other CI/CD integrations
 
 ### With metadata via `behave.ini`
 
@@ -267,16 +279,18 @@ See [docs/architecture.md](docs/architecture.md) for details.
 behave-modern-json-report/
 ├── behave_modern_json_report/
 │   ├── __init__.py
-│   ├── formatter.py        # Behave Formatter API entrypoint
-│   ├── collector.py        # Behave events → model (only Behave dep)
-│   ├── serializer.py       # Model → JSON (no Behave dep)
-│   ├── schema.py           # Schema version constants
-│   ├── validator.py        # JSON Schema + runtime validation
-│   ├── models.py           # Execution model dataclasses
-│   ├── statistics.py       # Statistics aggregator
-│   ├── environment.py      # Runtime environment detection
-│   ├── attach.py           # High-level attachment helpers for hooks
-│   ├── utils.py            # IDs, timing, status, MIME helpers
+│   ├── formatter.py             # Modern JSON Formatter API entrypoint
+│   ├── cucumber_formatter.py    # Cucumber JSON Formatter API entrypoint
+│   ├── cucumber_serializer.py   # Model → Cucumber JSON (no Behave dep)
+│   ├── collector.py             # Behave events → model (only Behave dep)
+│   ├── serializer.py            # Model → JSON (no Behave dep)
+│   ├── schema.py                # Schema version constants
+│   ├── validator.py             # JSON Schema + runtime validation
+│   ├── models.py                # Execution model dataclasses
+│   ├── statistics.py            # Statistics aggregator
+│   ├── environment.py           # Runtime environment detection
+│   ├── attach.py                # High-level attachment helpers for hooks
+│   ├── utils.py                 # IDs, timing, status, MIME helpers
 │   └── schemas/
 │       └── execution.schema.json
 ├── examples/
@@ -310,6 +324,7 @@ Test suites:
 - **Unit tests** — utils, statistics, environment, attachments
 - **Schema validation tests** — golden report, invalid reports
 - **Serialization tests** — all model fields, options, backgrounds, rules
+- **Cucumber serializer tests** — status mapping, embeddings, output, backgrounds, outlines
 - **Regression tests** — collector lifecycle, formatter output
 - **Golden JSON tests** — structural stability
 
