@@ -105,7 +105,7 @@ def _location_str(location: Any) -> str | None:
         return None
     if line is not None:
         return f"{filename}:{line}"
-    return filename
+    return str(filename)
 
 
 def _tags_to_cucumber(tags: list[str]) -> list[dict[str, Any]]:

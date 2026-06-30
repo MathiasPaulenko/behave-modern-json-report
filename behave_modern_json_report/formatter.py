@@ -17,9 +17,9 @@ import sys
 from typing import Any
 
 try:
-    from behave.formatter.base import Formatter as _BaseFormatter
+    from behave.formatter.base import Formatter as _BaseFormatter  # type: ignore[import-untyped]
 except Exception:  # pragma: no cover
-    _BaseFormatter = object  # type: ignore[misc,assignment]
+    _BaseFormatter = object  # type: ignore[misc,assignment,unused-ignore]
 
 from .collector import Collector
 from .serializer import Serializer, SerializerOptions
@@ -83,7 +83,7 @@ def _project_name_from_config(config: Any) -> str | None:
         with contextlib.suppress(Exception):
             value = get("project_name", "")
             if value and value.strip():
-                return value.strip()
+                return str(value.strip())
     # Then try userdata (from [behave.userdata] or --userdata)
     userdata = getattr(config, "userdata", None)
     if isinstance(userdata, dict):
@@ -292,7 +292,7 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
             if callable(flush):
                 flush()
         else:
-            with open(os.fspath(stream), "w", encoding="utf-8") as fh:
+            with open(os.fspath(str(stream)), "w", encoding="utf-8") as fh:
                 fh.write(payload)
                 fh.write("\n")
 
@@ -325,4 +325,4 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
         self._collector.add_log(level=level, message=safe_str(message))
 
 
-__all__ = ["ModernJSONFormatter"]
+__all__ = ["_BaseFormatter", "ModernJSONFormatter"]

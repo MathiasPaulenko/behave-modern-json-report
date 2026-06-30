@@ -45,12 +45,12 @@ class ValidationResult:
 def load_schema() -> dict[str, Any]:
     """Load the bundled JSON Schema from disk."""
     with SCHEMA_FILE.open("r", encoding="utf-8") as fh:
-        return json.load(fh)
+        return dict(json.load(fh))
 
 
 def _jsonschema_available() -> bool:
     try:
-        import jsonschema  # noqa: F401
+        import jsonschema  # type: ignore[import-untyped]  # noqa: F401
 
         return True
     except Exception:

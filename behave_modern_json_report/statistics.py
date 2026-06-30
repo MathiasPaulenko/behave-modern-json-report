@@ -95,7 +95,9 @@ def compute_statistics(report: ExecutionReport) -> Statistics:
     pass_rate = (counts["passed"] / total_terminal) if total_terminal else 0.0
     avg_scenario_duration = (sum(all_durations) / len(all_durations)) if all_durations else 0.0
     common_exception_type = (
-        max(exception_counts, key=exception_counts.get) if exception_counts else None
+        max(exception_counts, key=lambda k: exception_counts.get(k, 0))
+        if exception_counts
+        else None
     )
 
     return Statistics(

@@ -29,7 +29,7 @@ from .utils import (
 
 def _behave_version() -> str | None:
     try:
-        import behave  # type: ignore[import-not-found]
+        import behave  # type: ignore[import-untyped]
     except Exception:
         return None
     return safe_str(getattr(behave, "__version__", None)) or None
@@ -100,7 +100,7 @@ def detect_environment(
 
     memory_mb: int | None = None
     try:
-        import psutil  # type: ignore[import-not-found]
+        import psutil  # type: ignore[import-untyped]
 
         memory_mb = int(psutil.virtual_memory().total / (1024 * 1024))
     except Exception:
