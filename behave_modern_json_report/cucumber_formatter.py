@@ -15,6 +15,7 @@ Usage::
 from __future__ import annotations
 
 import contextlib
+import os
 import sys
 from typing import Any
 
@@ -30,6 +31,7 @@ from .formatter import (
     _project_name_from_config,
     _userdata_from_config,
 )
+from .utils import safe_str
 
 
 def _cucumber_options_from_config(
@@ -42,7 +44,6 @@ def _cucumber_options_from_config(
     ensure_ascii = False
     embed_attachments = True
     include_output = True
-    include_hooks = True
     include_background = True
     duration_in_nanos = True
 
@@ -62,8 +63,6 @@ def _cucumber_options_from_config(
             with contextlib.suppress(Exception):
                 include_output = _parse_bool(get("include_output", "true"))
             with contextlib.suppress(Exception):
-                include_hooks = _parse_bool(get("include_hooks", "true"))
-            with contextlib.suppress(Exception):
                 include_background = _parse_bool(get("include_background", "true"))
             with contextlib.suppress(Exception):
                 duration_in_nanos = _parse_bool(get("duration_in_nanos", "true"))
@@ -75,7 +74,6 @@ def _cucumber_options_from_config(
         ensure_ascii=ensure_ascii,
         embed_attachments=embed_attachments,
         include_output=include_output,
-        include_hooks=include_hooks,
         include_background=include_background,
         duration_in_nanos=duration_in_nanos,
     )
@@ -194,3 +192,38 @@ class CucumberJSONFormatter(_BaseFormatter):  # type: ignore[misc]
         if callable(write):
             write(payload)
             write("\n")
+            flush = getattr(stream, "flush", None)
+            if callable(flush):
+                flush()
+        else:
+            with open(os.fspath(str(stream)), "w", encoding="utf-8") as fh:
+                fh.write(payload)
+                fh.write("\n")
+
+    # ------------------------------------------------------------------
+    # Public API for programmatic use
+    # ------------------------------------------------------------------
+
+    def add_attachment(
+        self,
+        *,
+        name: str,
+        mime_type: str,
+        content: str | None = None,
+        path: str | None = None,
+        url: str | None = None,
+        encoding: str = "raw",
+        size: int | None = None,
+    ) -> None:
+        self._collector.add_attachment(
+            name=name,
+            mime_type=mime_type,
+            content=content,
+            path=path,
+            url=url,
+            encoding=encoding,
+            size=size,
+        )
+
+    def add_log(self, level: str, message: str) -> None:
+        self._collector.add_log(level=level, message=safe_str(message))
