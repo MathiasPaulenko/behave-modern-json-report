@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .models import ExecutionReport, Feature, Scenario, Statistics
+from .models import ExecutionReport, Feature, Rule, Scenario, Statistics
 from .utils import (
     _FAILED_STATUSES,
     ALL_STATUSES,
@@ -54,6 +54,9 @@ def compute_statistics(report: ExecutionReport) -> Statistics:
         features += 1
         feature_duration = 0.0
 
+        # The collector appends every scenario to feature.scenarios,
+        # including those that also belong to a rule.  Iterate the
+        # single list to avoid double-counting.
         for scenario in feature.scenarios:
             scenarios += 1
             scenario_duration = 0.0
@@ -71,10 +74,6 @@ def compute_statistics(report: ExecutionReport) -> Statistics:
                 slowest_step_duration = max(slowest_step_duration, step.duration)
                 if step.error and step.error.type:
                     exception_counts[step.error.type] = exception_counts.get(step.error.type, 0) + 1
-
-            # Count scenario-level status
-            if scenario.status in _STATUS_FIELDS:
-                pass  # Already counted per-step if steps exist
 
             scenario.duration = scenario.duration or scenario_duration
             all_durations.append(scenario.duration)
@@ -122,7 +121,12 @@ def compute_statistics(report: ExecutionReport) -> Statistics:
 
 
 def feature_status(feature: Feature) -> str:
-    """Derive a feature status from its scenarios."""
+    """Derive a feature status from its scenarios.
+
+    The collector appends every scenario to ``feature.scenarios``,
+    including those that also belong to a rule, so iterating the
+    single list is sufficient.
+    """
     for scenario in feature.scenarios:
         if scenario.status in _FAILED_STATUSES:
             return STATUS_FAILED
@@ -145,8 +149,21 @@ def scenario_status(scenario: Scenario) -> str:
     return STATUS_PASSED
 
 
+def rule_status(rule: Rule) -> str:
+    """Derive a rule status from its scenarios."""
+    for scenario in rule.scenarios:
+        if scenario.status in _FAILED_STATUSES:
+            return STATUS_FAILED
+    if rule.scenarios and all(s.status == STATUS_SKIPPED for s in rule.scenarios):
+        return STATUS_SKIPPED
+    if not rule.scenarios:
+        return STATUS_PASSED
+    return STATUS_PASSED
+
+
 __all__ = [
     "compute_statistics",
     "feature_status",
+    "rule_status",
     "scenario_status",
 ]

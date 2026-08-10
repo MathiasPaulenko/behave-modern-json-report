@@ -23,6 +23,7 @@ from .models import (
     Feature,
     Location,
     Metadata,
+    Rule,
     Scenario,
     Statistics,
     Step,
@@ -248,15 +249,44 @@ def _scenario_to_dict(scenario: Scenario, *, options: SerializerOptions) -> dict
         d["location"] = _location_to_dict(scenario.location)
     if scenario.rule is not None:
         d["rule"] = scenario.rule
+    if scenario.rule_id is not None:
+        d["ruleId"] = scenario.rule_id
     if scenario.is_outline:
         d["isOutline"] = True
     if scenario.outline_name is not None:
         d["outlineName"] = scenario.outline_name
+    if scenario.example_tags:
+        d["exampleTags"] = list(scenario.example_tags)
     if scenario.background is not None:
         d["background"] = _background_to_dict(scenario.background, options=options)
     if scenario.retry is not None:
         d["retry"] = dict(scenario.retry)
     d["steps"] = [_step_to_dict(s, options=options) for s in scenario.steps]
+    return d
+
+
+def _rule_to_dict(rule: Rule, *, options: SerializerOptions) -> dict[str, Any]:
+    d: dict[str, Any] = {
+        "id": rule.id,
+        "name": rule.name,
+        "featureId": rule.feature_id,
+        "status": rule.status,
+        "duration": rule.duration,
+    }
+    if rule.description is not None:
+        d["description"] = rule.description
+    if rule.tags:
+        d["tags"] = list(rule.tags)
+    if rule.location is not None:
+        d["location"] = _location_to_dict(rule.location)
+    if rule.background is not None:
+        d["background"] = _background_to_dict(rule.background, options=options)
+    rule_scenarios: list[dict[str, Any]] = []
+    for s in rule.scenarios:
+        if options.exclude_passed_scenarios and s.status == STATUS_PASSED:
+            continue
+        rule_scenarios.append(_scenario_to_dict(s, options=options))
+    d["scenarios"] = rule_scenarios
     return d
 
 
@@ -266,6 +296,10 @@ def _feature_to_dict(feature: Feature, *, options: SerializerOptions) -> dict[st
         if options.exclude_passed_scenarios and sc.status == STATUS_PASSED:
             continue
         scenarios.append(_scenario_to_dict(sc, options=options))
+
+    rules: list[dict[str, Any]] = []
+    for rule in feature.rules:
+        rules.append(_rule_to_dict(rule, options=options))
 
     d: dict[str, Any] = {
         "id": feature.id,
@@ -284,6 +318,8 @@ def _feature_to_dict(feature: Feature, *, options: SerializerOptions) -> dict[st
         d["line"] = feature.line
     if feature.background is not None:
         d["background"] = _background_to_dict(feature.background, options=options)
+    if rules:
+        d["rules"] = rules
     return d
 
 
@@ -385,6 +421,9 @@ class Serializer:
         features: list[dict[str, Any]] = []
         for feature in report.features:
             fd = _feature_to_dict(feature, options=opts)
+            # The collector adds rule scenarios to feature.scenarios too,
+            # so fd["scenarios"] contains all non-passed scenarios (top-level
+            # and rule).  Only drop when no scenarios remain at all.
             if opts.exclude_passed_scenarios and not fd["scenarios"]:
                 continue
             features.append(fd)

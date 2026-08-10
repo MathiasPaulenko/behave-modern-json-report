@@ -156,9 +156,32 @@ class Scenario:
     steps: list[Step] = field(default_factory=list)
     background: Background | None = None
     rule: str | None = None
+    rule_id: str | None = None
     is_outline: bool = False
     outline_name: str | None = None
+    example_tags: list[str] = field(default_factory=list)
     retry: dict[str, Any] | None = None
+
+
+# ---------------------------------------------------------------------------
+# Rule (Gherkin v6)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class Rule:
+    """A Gherkin v6 Rule grouping scenarios within a feature."""
+
+    id: str
+    name: str
+    feature_id: str
+    description: str | None = None
+    tags: list[str] = field(default_factory=list)
+    location: Location | None = None
+    background: Background | None = None
+    scenarios: list[Scenario] = field(default_factory=list)
+    status: str = STATUS_PASSED
+    duration: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +202,7 @@ class Feature:
     status: str = STATUS_PASSED
     duration: float = 0.0
     scenarios: list[Scenario] = field(default_factory=list)
+    rules: list[Rule] = field(default_factory=list)
     background: Background | None = None
 
 
@@ -282,6 +306,7 @@ __all__ = [
     "Feature",
     "Location",
     "Metadata",
+    "Rule",
     "Scenario",
     "Statistics",
     "Step",

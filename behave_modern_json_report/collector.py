@@ -26,14 +26,17 @@ from .models import (
     Feature,
     Location,
     Metadata,
+    Rule,
     Scenario,
     Statistics,
     Step,
     StepLog,
 )
 from .schema import SCHEMA_VERSION
-from .statistics import compute_statistics, feature_status, scenario_status
+from .statistics import compute_statistics, feature_status, rule_status, scenario_status
 from .utils import (
+    _FAILED_STATUSES,
+    STATUS_FAILED,
     STATUS_PASSED,
     STATUS_UNTESTED,
     generate_id,
@@ -176,6 +179,8 @@ class Collector:
         self._current_scenario: Scenario | None = None
         self._current_step: Step | None = None
         self._current_rule_name: str | None = None
+        self._current_rule: Rule | None = None
+        self._rule_start: float | None = None
         self._step_start: float | None = None
         self._scenario_start: float | None = None
         self._feature_start: float | None = None
@@ -205,6 +210,11 @@ class Collector:
         feature = self._current_feature
         if feature is None:
             return None
+        # Finalize any pending rule (which also ends any active scenario)
+        if self._current_rule is not None:
+            self.end_rule()
+        elif self._current_scenario is not None:
+            self.end_scenario(None)
         if self._feature_start is not None:
             feature.duration = monotonic_seconds(self._feature_start)
         feature.status = feature_status(feature)
@@ -217,11 +227,43 @@ class Collector:
     # Rule lifecycle (Gherkin v6 / Behave 1.3.x)
     # ------------------------------------------------------------------
 
-    def start_rule(self, behave_rule: Any) -> None:
-        self._current_rule_name = safe_str(getattr(behave_rule, "name", "")) or None
+    def start_rule(self, behave_rule: Any) -> Rule | None:
+        feature = self._current_feature
+        if feature is None:
+            return None
+        # Finalize previous rule if any
+        if self._current_rule is not None:
+            self.end_rule()
+        rule = Rule(
+            id=generate_id("rule"),
+            name=safe_str(getattr(behave_rule, "name", "")) or "<unnamed>",
+            feature_id=feature.id,
+            description=self._join_description(getattr(behave_rule, "description", None)),
+            tags=safe_tags(getattr(behave_rule, "tags", None)),
+            location=_location(behave_rule),
+        )
+        behave_background = getattr(behave_rule, "background", None)
+        if behave_background:
+            rule.background = self._make_background(behave_background)
+        feature.rules.append(rule)
+        self._current_rule = rule
+        self._current_rule_name = rule.name
+        self._rule_start = time.monotonic()
+        return rule
 
     def end_rule(self) -> None:
+        rule = self._current_rule
+        if rule is None:
+            return
+        # Finalize any active scenario before ending the rule
+        if self._current_scenario is not None:
+            self.end_scenario(None)
+        if self._rule_start is not None:
+            rule.duration = monotonic_seconds(self._rule_start)
+        rule.status = rule_status(rule)
+        self._current_rule = None
         self._current_rule_name = None
+        self._rule_start = None
 
     # ------------------------------------------------------------------
     # Scenario lifecycle
@@ -232,7 +274,7 @@ class Collector:
         if feature is None:
             return None
         scenario_type = safe_str(getattr(behave_scenario, "type", ""))
-        is_outline = scenario_type in ("scenario_outline", "outline")
+        is_outline = scenario_type in ("scenario_outline", "outline", "example")
         outline_name: str | None = None
         if is_outline:
             outline_name = (
@@ -240,6 +282,7 @@ class Collector:
                 or getattr(behave_scenario, "name", None)
                 or None
             )
+        rule = self._current_rule
         scenario = Scenario(
             id=generate_id("scenario"),
             name=safe_str(getattr(behave_scenario, "name", "")) or "<unnamed>",
@@ -249,12 +292,19 @@ class Collector:
             location=_location(behave_scenario),
             examples=self._extract_examples(behave_scenario),
             rule=self._current_rule_name,
+            rule_id=rule.id if rule is not None else None,
             is_outline=is_outline,
             outline_name=outline_name,
+            example_tags=self._extract_example_tags(behave_scenario),
         )
-        if feature.background:
+        # Assign background: rule background takes priority, then feature background
+        if rule is not None and rule.background:
+            scenario.background = rule.background
+        elif feature.background:
             scenario.background = feature.background
         feature.scenarios.append(scenario)
+        if rule is not None:
+            rule.scenarios.append(scenario)
         self._current_scenario = scenario
         self._scenario_start = time.monotonic()
         return scenario
@@ -431,13 +481,31 @@ class Collector:
             return [dict(examples)]
         return [{"value": safe_str(examples)}]
 
+    @staticmethod
+    def _extract_example_tags(behave_scenario: Any) -> list[str]:
+        """Extract tags specific to Example blocks (Gherkin v6)."""
+        # behave may expose example-level tags via 'example_tags' or
+        # as part of 'effective_tags' minus scenario 'tags'.
+        example_tags = getattr(behave_scenario, "example_tags", None)
+        if example_tags:
+            return safe_tags(example_tags)
+        # Fallback: compute difference between effective_tags and tags
+        effective = getattr(behave_scenario, "effective_tags", None)
+        scenario_tags = getattr(behave_scenario, "tags", None)
+        if effective and scenario_tags is not None:
+            effective_set = set(safe_tags(effective))
+            scenario_set = set(safe_tags(scenario_tags))
+            diff = effective_set - scenario_set
+            return sorted(diff) if diff else []
+        return []
+
     def _overall_status(self) -> str:
         for feature in self._features:
-            if feature.status == "failed":
-                return "failed"
+            if feature.status in _FAILED_STATUSES:
+                return STATUS_FAILED
             for scenario in feature.scenarios:
-                if scenario.status == "failed":
-                    return "failed"
+                if scenario.status in _FAILED_STATUSES:
+                    return STATUS_FAILED
         return STATUS_PASSED
 
 

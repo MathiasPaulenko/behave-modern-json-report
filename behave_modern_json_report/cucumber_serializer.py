@@ -68,7 +68,6 @@ class CucumberSerializerOptions:
         ensure_ascii: bool = False,
         embed_attachments: bool = True,
         include_output: bool = True,
-        include_hooks: bool = True,
         include_background: bool = True,
         duration_in_nanos: bool = True,
     ) -> None:
@@ -78,7 +77,6 @@ class CucumberSerializerOptions:
         self.ensure_ascii = ensure_ascii
         self.embed_attachments = embed_attachments
         self.include_output = include_output
-        self.include_hooks = include_hooks
         self.include_background = include_background
         self.duration_in_nanos = duration_in_nanos
 
@@ -272,6 +270,13 @@ def _scenario_to_element(
     if scenario.is_outline and scenario.outline_name:
         element["name"] = scenario.outline_name
 
+    if scenario.rule is not None:
+        element["rule"] = scenario.rule
+    if scenario.rule_id is not None:
+        element["ruleId"] = scenario.rule_id
+    if scenario.example_tags:
+        element["exampleTags"] = list(scenario.example_tags)
+
     return element
 
 
@@ -283,15 +288,33 @@ def _feature_to_cucumber(
     """Convert a model Feature to a Cucumber feature dict."""
     elements: list[dict[str, Any]] = []
 
-    # Background as first element
+    # Feature-level background as first element
     if options.include_background and feature.background is not None:
         bg_element = _background_to_element(feature.background, options=options)
         if bg_element is not None:
             elements.append(bg_element)
 
-    # Scenarios
+    # Track which scenarios belong to rules to avoid duplicate emission
+    rule_scenario_ids: set[str] = set()
+
+    # Rules with their backgrounds and scenarios
+    for rule in feature.rules:
+        # Rule background as element
+        if options.include_background and rule.background is not None:
+            bg_element = _background_to_element(rule.background, options=options)
+            if bg_element is not None:
+                bg_element["rule"] = rule.name
+                bg_element["ruleId"] = rule.id
+                elements.append(bg_element)
+        # Rule scenarios
+        for scenario in rule.scenarios:
+            elements.append(_scenario_to_element(scenario, options=options))
+            rule_scenario_ids.add(scenario.id)
+
+    # Scenarios not belonging to any rule
     for scenario in feature.scenarios:
-        elements.append(_scenario_to_element(scenario, options=options))
+        if scenario.id not in rule_scenario_ids:
+            elements.append(_scenario_to_element(scenario, options=options))
 
     return {
         "uri": feature.filename or "",

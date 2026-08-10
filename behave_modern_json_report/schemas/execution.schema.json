@@ -144,6 +144,10 @@
           "type": "array",
           "items": { "$ref": "#/$defs/scenario" }
         },
+        "rules": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rule" }
+        },
         "background": { "$ref": "#/$defs/background" }
       }
     },
@@ -162,8 +166,10 @@
         "status": { "type": "string", "enum": ["passed", "failed", "skipped", "undefined", "pending", "untested", "error", "hook_error", "cleanup_error", "xfailed", "xpassed"] },
         "duration": { "type": "number", "minimum": 0 },
         "rule": { "type": ["string", "null"] },
+        "ruleId": { "type": ["string", "null"] },
         "isOutline": { "type": "boolean" },
         "outlineName": { "type": ["string", "null"] },
+        "exampleTags": { "type": "array", "items": { "type": "string" } },
         "background": { "$ref": "#/$defs/background" },
         "retry": { "type": "object" },
         "steps": {
@@ -194,6 +200,26 @@
           "type": "array",
           "items": { "$ref": "#/$defs/stepLog" }
         }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "required": ["id", "name", "featureId", "status", "duration", "scenarios"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "featureId": { "type": "string" },
+        "description": { "type": ["string", "null"] },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "location": { "$ref": "#/$defs/location" },
+        "background": { "$ref": "#/$defs/background" },
+        "scenarios": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/scenario" }
+        },
+        "status": { "type": "string", "enum": ["passed", "failed", "skipped", "undefined", "pending", "untested", "error", "hook_error", "cleanup_error", "xfailed", "xpassed"] },
+        "duration": { "type": "number", "minimum": 0 }
       }
     },
     "error": {
