@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "behave-modern-json-report"
-version = "1.1.0"
+version = "1.2.0"
 description = "Modern JSON report formatter for Behave that generates a rich, structured execution model."
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.11"
 authors = [
     { name = "behave-modern-json-report contributors" },
@@ -26,7 +26,6 @@ keywords = [
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
@@ -59,8 +58,12 @@ Repository = "https://github.com/MathiasPaulenko/behave-modern-json-report"
 Issues = "https://github.com/MathiasPaulenko/behave-modern-json-report/issues"
 Changelog = "https://github.com/MathiasPaulenko/behave-modern-json-report/blob/main/CHANGELOG.md"
 
+[project.entry-points."behave.formatters"]
+modern-json = "behave_modern_json_report.formatter:ModernJSONFormatter"
+cucumber-json = "behave_modern_json_report.cucumber_formatter:CucumberJSONFormatter"
+
 [tool.setuptools]
-packages = ["behave_modern_json_report"]
+packages = ["behave_modern_json_report", "behave_modern_json_report.schemas"]
 include-package-data = true
 
 [tool.setuptools.package-data]
@@ -85,7 +88,10 @@ warn_unused_configs = true
 minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    "ignore:.*is deprecated and slated for removal in Python.*:DeprecationWarning",
+]
 
 [tool.coverage.run]
 branch = true

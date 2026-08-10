@@ -1,5 +1,5 @@
 {
-  "schemaVersion": "1.1.0",
+  "schemaVersion": "1.2.0",
   "execution": {
     "executionId": "exec-example-0001",
     "projectName": "calculator",
@@ -7,7 +7,7 @@
     "endTime": "2026-06-30T14:20:01.500Z",
     "duration": 1.5,
     "status": "passed",
-    "command": "behave --format json-modern --outfile report.json",
+    "command": "behave --format modern-json --outfile report.json",
     "workingDirectory": "/home/user/calculator"
   },
   "statistics": {

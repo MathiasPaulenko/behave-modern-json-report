@@ -5,7 +5,7 @@ A modern JSON report formatter for [Behave](https://github.com/behave/behave) th
 [![CI](https://github.com/MathiasPaulenko/behave-modern-json-report/actions/workflows/ci.yml/badge.svg)](https://github.com/MathiasPaulenko/behave-modern-json-report/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Schema Version](https://img.shields.io/badge/schema-1.1.0-green.svg)](docs/schema.md)
+[![Schema Version](https://img.shields.io/badge/schema-1.2.0-green.svg)](docs/schema.md)
 
 ---
 
@@ -24,15 +24,16 @@ It is the data foundation for:
 
 ## Features
 
-- **Schema-versioned** JSON output (`schemaVersion: "1.1.0"`)
+- **Schema-versioned** JSON output (`schemaVersion: "1.2.0"`)
 - **Stable unique identifiers** for every entity (execution, feature, scenario, step, attachment, error)
 - **Structured errors** — type, message, traceback, location (never raw strings)
 - **Attachments** — image, JSON, XML, HTML, PDF, video, text, binary; embedded or external
 - **Attachment helpers** — `attach_file`, `attach_text`, `attach_json`, `attach_screenshot`, `log` for `environment.py` hooks
 - **Step-level logs**
-- **Gherkin backgrounds** — shared background steps captured at feature and scenario level
-- **Rule support** — Gherkin v6 / Behave 1.3.x rules tracked via `scenario.rule`
-- **Scenario outlines** — `isOutline` and `outlineName` fields
+- **Gherkin backgrounds** — shared background steps captured at feature, rule, and scenario level
+- **Rule support** — Gherkin v6 / Behave 1.3.x rules as first-class `Rule` entities with background, tags, location, and nested scenarios
+- **Scenario outlines** — `isOutline` and `outlineName` fields, plus `exampleTags` for tags on Example blocks
+- **Example keyword** — Gherkin v6 `Example` keyword recognised as scenario outline
 - **Expanded statuses** — `passed`, `failed`, `skipped`, `undefined`, `pending`, `untested`, `error`, `hook_error`, `cleanup_error`, `xfailed`, `xpassed`
 - **Rich statistics** — pass rate, counts, duration, error count, total attachments/logs, slowest step, avg scenario, common exception type, per-tag breakdown
 - **Rich environment** — Python, Behave, platform, OS, hostname, CI provider, cwd, command, user, CPU count, memory, git branch/commit/remote
@@ -41,7 +42,7 @@ It is the data foundation for:
 - **Zero Behave dependency** in the serializer — the JSON model is portable
 - **JSON Schema** validation with helpful error messages
 - **Configurable** — pretty/compact, embed/exclude attachments, exclude passed scenarios
-- **Production-ready** — 123 tests, lint, type-check, CI
+- **Production-ready** — 174 tests, lint, type-check, CI
 
 ## Installation
 
@@ -72,16 +73,25 @@ pip install behave-modern-json-report[dev]
 ### As a Behave formatter (modern JSON)
 
 ```bash
+# Short format name (via entry point)
+behave --format modern-json --outfile report.json
+
+# Full module path (always works)
 behave --format behave_modern_json_report:ModernJSONFormatter --outfile report.json
 ```
 
 ### As a Behave formatter (Cucumber JSON)
 
 ```bash
+# Short format name (via entry point)
+behave --format cucumber-json --outfile cucumber.json
+
+# Full module path (always works)
 behave --format behave_modern_json_report:CucumberJSONFormatter --outfile cucumber.json
 ```
 
 The Cucumber JSON format is compatible with tools that consume Cucumber JSON reports:
+
 - [cucumber-reporting](https://github.com/damianszczepanik/cucumber-reporting) (Jenkins plugin)
 - [multiple-cucumber-html-reporter](https://github.com/wswebcreation/multiple-cucumber-html-reporter)
 - ReportPortal, Allure, and other CI/CD integrations
@@ -141,17 +151,37 @@ json_str = serialize(report, options=SerializerOptions(pretty=True))
 ```python
 from behave_modern_json_report import validate_json
 
-result = validate_json(open("report.json").read())
+with open("report.json") as f:
+    result = validate_json(f.read())
 if not result:
     for error in result.errors:
         print(f"{error.path}: {error.message}")
+```
+
+### Attachments in `environment.py`
+
+```python
+from behave_modern_json_report import attach_file, attach_screenshot, attach_text, attach_json, log
+
+def after_step(context, step):
+    if step.status == "failed":
+        # Screenshot from Selenium, Playwright, bytes, or file path
+        attach_screenshot(context, context.driver, name="failure.png")
+        # Attach arbitrary text
+        attach_text(context, f"URL: {context.url}", name="url.txt")
+        # Attach JSON data
+        attach_json(context, {"url": context.url, "status": step.status})
+        # Attach a file from disk
+        attach_file(context, "/tmp/dump.html", name="page.html")
+        # Log a message to the step
+        log(context, f"Failure at {context.url}", level="ERROR")
 ```
 
 ## JSON Structure
 
 ```json
 {
-  "schemaVersion": "1.0.0",
+  "schemaVersion": "1.2.0",
   "execution": {
     "executionId": "exec-...",
     "projectName": "my-app",
@@ -177,7 +207,11 @@ if not result:
     "totalAttachments": 0,
     "totalLogs": 0,
     "slowestStepDuration": 0.2,
-    "avgScenarioDuration": 0.5
+    "avgScenarioDuration": 0.5,
+    "commonExceptionType": null,
+    "byTag": {
+      "smoke": { "count": 3, "duration": 1.5, "passed": 3, "failed": 0 }
+    }
   },
   "environment": {
     "pythonVersion": "3.12.3",
@@ -188,7 +222,7 @@ if not result:
     "hostname": "build-agent-01",
     "ciProvider": "github-actions",
     "cwd": "/home/user/project",
-    "command": "behave --format json-modern",
+    "command": "behave --format modern-json",
     "user": "tester",
     "cpuCount": 8,
     "memoryMb": 16384,
@@ -219,6 +253,16 @@ if not result:
               "duration": 0.1
             }
           ]
+        }
+      ],
+      "rules": [
+        {
+          "id": "rule-...",
+          "name": "Addition",
+          "featureId": "feature-...",
+          "status": "passed",
+          "duration": 0.3,
+          "scenarios": []
         }
       ]
     }
@@ -325,7 +369,7 @@ Test suites:
 - **Schema validation tests** — golden report, invalid reports
 - **Serialization tests** — all model fields, options, backgrounds, rules
 - **Cucumber serializer tests** — status mapping, embeddings, output, backgrounds, outlines
-- **Regression tests** — collector lifecycle, formatter output
+- **Regression tests** — collector lifecycle, formatter output, status aggregation, serialization filtering, `_overall_status`
 - **Golden JSON tests** — structural stability
 
 ## License

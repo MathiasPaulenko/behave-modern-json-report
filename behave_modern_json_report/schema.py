@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SCHEMA_VERSION: str = "1.1.0"
+SCHEMA_VERSION: str = "1.2.0"
 """Canonical schema version shipped with this package."""
 
 SCHEMA_FILE: Path = Path(__file__).resolve().parent / "schemas" / "execution.schema.json"

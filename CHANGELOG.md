@@ -5,14 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-08-10
 
 ### Added
 
+- **Gherkin v6 full support**:
+  - **Rule dataclass**: first-class `Rule` entity with `id`, `name`, `description`, `tags`, `location`, `background`, `scenarios`, `status`, `duration`.
+  - **Rule backgrounds**: backgrounds defined inside a `Rule` are captured and associated with the rule and its scenarios.
+  - **Tags on Examples**: `exampleTags` field on scenarios captures tags specific to `Example` blocks.
+  - **`Example` keyword**: Gherkin v6 `Example` keyword is now recognised as a scenario outline type.
+  - **`ruleId` field**: scenarios inside a rule carry the rule's ID for hierarchical linking.
+  - **`rules` array on features**: features now include a `rules` array with full rule entities in both modern JSON and Cucumber JSON output.
+  - **`rule_status()`**: new statistics function to derive rule status from its scenarios.
+  - **Entry points**: `modern-json` and `cucumber-json` short format names registered as `behave.formatters` entry points.
 - **CucumberJSONFormatter**: new Behave formatter (`cucumber-json`) that outputs de facto Cucumber JSON report format for compatibility with cucumber-reporting, multiple-cucumber-html-reporter, ReportPortal, Jenkins plugins, and other tools that consume Cucumber JSON.
 - **CucumberSerializer**: model-to-Cucumber JSON serializer with configurable options (pretty/compact, embed attachments, include output, include backgrounds, duration in nanos).
 - **serialize_cucumber()**: convenience function for programmatic use.
+- 24 new tests covering Gherkin v6 features (rules, backgrounds, example tags, Example keyword).
 - 22 new tests covering Cucumber serializer and formatter.
+
+### Fixed
+
+- **`_FAILED_STATUSES` no longer includes `xfailed`**: `xfailed` means "expected failure" — the test was expected to fail and it did, which is a successful outcome. Including it in failed statuses caused incorrect overall status and error count inflation.
+- **`CucumberJSONFormatter.add_attachment` / `add_log`**: these methods were missing, causing attachments and logs to silently fail when using the Cucumber formatter. Both methods now delegate to the collector, matching `ModernJSONFormatter`'s API.
+- **`CucumberJSONFormatter._flush`**: now calls `flush()` on the stream and includes a file-path fallback when the stream object has no `write` method, matching `ModernJSONFormatter._flush`.
+- **`exclude_passed_scenarios` now applies to rule scenarios**: previously, passed scenarios inside rules were not filtered when this option was enabled, creating inconsistency between top-level and rule-level scenario lists.
+- **Structural validator now validates `rules` array**: when `jsonschema` is not installed, the fallback structural validator did not validate the `rules` array on features. Rules are now validated with the same thoroughness as features and scenarios.
+- **Collector lifecycle**: `end_rule()` now finalizes any active scenario before ending the rule. `end_feature()` now finalizes any active scenario when no rule is active. This prevents dangling scenario state with unset status/duration.
+- **`_overall_status` now checks all failed statuses**: previously only checked `STATUS_FAILED`, missing `error`, `hook_error`, and `cleanup_error` statuses. Now uses `_FAILED_STATUSES` frozenset for consistency.
+- **`format_duration` type hint**: parameter type now correctly accepts `float | None` to match runtime behavior.
+- **Dead code removal**: `CucumberSerializerOptions.include_hooks` was defined but never used in serialization logic — removed from options, formatter config parsing, and docs.
+- **Inline imports moved to module top**: `import json` in `formatter.py`, `import os` in `cucumber_formatter.py`, and `import json` / `import io` in `attach.py` were inline in functions — moved to top-level imports.
+- **Formatter `name` attribute mismatch**: `ModernJSONFormatter.name` was `"json-modern"` but the entry point in `pyproject.toml` registers it as `"modern-json"`. Fixed to match.
+
+### Changed
+
+- **License declaration modernized** (PEP 639): `license = { text = "MIT" }` replaced with `license = "MIT"` and deprecated `License ::` classifier removed from `pyproject.toml`.
+- **`schemas` subpackage** explicitly declared in `pyproject.toml` to eliminate setuptools warning about ambiguous package configuration.
 
 ## [1.1.0] - 2025-01-15
 
