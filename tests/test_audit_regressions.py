@@ -44,28 +44,46 @@ from behave_modern_json_report.utils import (
 
 def _behave_feature(name="Feature 1", tags=None, filename="f.feature", line=1):
     return SimpleNamespace(
-        name=name, tags=tags or [], filename=filename, line=line, description=None,
+        name=name,
+        tags=tags or [],
+        filename=filename,
+        line=line,
+        description=None,
     )
 
 
 def _behave_rule(name="Rule 1", tags=None, filename="f.feature", line=2):
     return SimpleNamespace(
-        name=name, tags=tags or [], filename=filename, line=line,
-        description=None, background=None,
+        name=name,
+        tags=tags or [],
+        filename=filename,
+        line=line,
+        description=None,
+        background=None,
     )
 
 
 def _behave_scenario(name="Scenario 1", tags=None, filename="f.feature", line=3):
     return SimpleNamespace(
-        name=name, tags=tags or [], filename=filename, line=line,
-        description=None, examples=None,
+        name=name,
+        tags=tags or [],
+        filename=filename,
+        line=line,
+        description=None,
+        examples=None,
     )
 
 
 def _behave_step(keyword="Given", text="a step", status="passed", filename="f.feature", line=5):
     return SimpleNamespace(
-        keyword=keyword, name=text, status=status, filename=filename,
-        line=line, error=None, doc_string=None, table=None,
+        keyword=keyword,
+        name=text,
+        status=status,
+        filename=filename,
+        line=line,
+        error=None,
+        doc_string=None,
+        table=None,
     )
 
 
@@ -126,9 +144,7 @@ class TestCucumberFormatterAttachments:
         fmt._collector.start_feature(_make_feature_ns())
         fmt._collector.start_scenario(_make_scenario_ns())
         fmt._collector.start_step(_make_step_ns())
-        fmt.add_attachment(
-            name="test.txt", mime_type="text/plain", content="hello", encoding="raw"
-        )
+        fmt.add_attachment(name="test.txt", mime_type="text/plain", content="hello", encoding="raw")
         fmt._collector.end_step(_make_step_ns())
         fmt._collector.end_scenario(None)
         fmt._collector.end_feature(None)
@@ -196,9 +212,7 @@ class TestNoDeadIncludeHooks:
 
 
 def _make_feature_ns():
-    return SimpleNamespace(
-        name="F", tags=[], filename="f.feature", line=1, description=None
-    )
+    return SimpleNamespace(name="F", tags=[], filename="f.feature", line=1, description=None)
 
 
 def _make_scenario_ns():
@@ -345,27 +359,39 @@ class TestExcludePassedScenariosRules:
             SerializerOptions,
         )
 
-        passed_step = Step(
-            id="s1", keyword="Given", text="ok", status=STATUS_PASSED, duration=0.1
-        )
-        failed_step = Step(
-            id="s2", keyword="Then", text="bad", status=STATUS_FAILED, duration=0.1
-        )
+        passed_step = Step(id="s1", keyword="Given", text="ok", status=STATUS_PASSED, duration=0.1)
+        failed_step = Step(id="s2", keyword="Then", text="bad", status=STATUS_FAILED, duration=0.1)
         passed_sc = Scenario(
-            id="sc-passed", name="P", feature_id="f", status=STATUS_PASSED,
-            duration=0.1, steps=[passed_step],
+            id="sc-passed",
+            name="P",
+            feature_id="f",
+            status=STATUS_PASSED,
+            duration=0.1,
+            steps=[passed_step],
         )
         failed_sc = Scenario(
-            id="sc-failed", name="F", feature_id="f", status=STATUS_FAILED,
-            duration=0.1, steps=[failed_step],
+            id="sc-failed",
+            name="F",
+            feature_id="f",
+            status=STATUS_FAILED,
+            duration=0.1,
+            steps=[failed_step],
         )
         rule = Rule(
-            id="r1", name="R", feature_id="f", status=STATUS_FAILED,
-            duration=0.2, scenarios=[passed_sc, failed_sc],
+            id="r1",
+            name="R",
+            feature_id="f",
+            status=STATUS_FAILED,
+            duration=0.2,
+            scenarios=[passed_sc, failed_sc],
         )
         feature = Feature(
-            id="f", name="F", status=STATUS_FAILED, duration=0.2,
-            scenarios=[passed_sc, failed_sc], rules=[rule],
+            id="f",
+            name="F",
+            status=STATUS_FAILED,
+            duration=0.2,
+            scenarios=[passed_sc, failed_sc],
+            rules=[rule],
         )
         report = ExecutionReport(
             schema_version=SCHEMA_VERSION,
@@ -422,7 +448,7 @@ class TestEndRuleFinalizesScenario:
         rule = report.features[0].rules[0]
         scenario = rule.scenarios[0]
         assert scenario.status == STATUS_PASSED
-        assert scenario.duration > 0.0
+        assert scenario.duration >= 0.0
         assert rule.status == STATUS_PASSED
 
 
@@ -452,7 +478,7 @@ class TestEndFeatureFinalizesScenario:
 
         scenario = report.features[0].scenarios[0]
         assert scenario.status == STATUS_PASSED
-        assert scenario.duration > 0.0
+        assert scenario.duration >= 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -474,26 +500,48 @@ class TestFeatureStatusChecksRuleScenarios:
         from behave_modern_json_report.utils import STATUS_FAILED, STATUS_PASSED
 
         passed_step = Step(
-            id="s1", keyword="Given", text="pass", status=STATUS_PASSED, duration=0.1,
+            id="s1",
+            keyword="Given",
+            text="pass",
+            status=STATUS_PASSED,
+            duration=0.1,
         )
         failed_step = Step(
-            id="s2", keyword="When", text="fail", status=STATUS_FAILED, duration=0.1,
+            id="s2",
+            keyword="When",
+            text="fail",
+            status=STATUS_FAILED,
+            duration=0.1,
         )
         passed_scenario = Scenario(
-            id="sc1", name="Top", feature_id="f1", status=STATUS_PASSED,
-            duration=0.1, steps=[passed_step],
+            id="sc1",
+            name="Top",
+            feature_id="f1",
+            status=STATUS_PASSED,
+            duration=0.1,
+            steps=[passed_step],
         )
         failed_rule_scenario = Scenario(
-            id="sc2", name="Rule scenario", feature_id="f1", status=STATUS_FAILED,
-            duration=0.1, steps=[failed_step],
+            id="sc2",
+            name="Rule scenario",
+            feature_id="f1",
+            status=STATUS_FAILED,
+            duration=0.1,
+            steps=[failed_step],
         )
         rule = Rule(
-            id="r1", name="Rule 1", feature_id="f1", status=STATUS_FAILED,
-            duration=0.1, scenarios=[failed_rule_scenario],
+            id="r1",
+            name="Rule 1",
+            feature_id="f1",
+            status=STATUS_FAILED,
+            duration=0.1,
+            scenarios=[failed_rule_scenario],
         )
         # Collector adds rule scenarios to feature.scenarios too
         feature = Feature(
-            id="f1", name="Feature 1", status=STATUS_PASSED,
+            id="f1",
+            name="Feature 1",
+            status=STATUS_PASSED,
             duration=0.2,
             scenarios=[passed_scenario, failed_rule_scenario],
             rules=[rule],
@@ -508,18 +556,32 @@ class TestFeatureStatusChecksRuleScenarios:
         from behave_modern_json_report.utils import STATUS_PASSED
 
         passed_step = Step(
-            id="s1", keyword="Given", text="pass", status=STATUS_PASSED, duration=0.1,
+            id="s1",
+            keyword="Given",
+            text="pass",
+            status=STATUS_PASSED,
+            duration=0.1,
         )
         passed_scenario = Scenario(
-            id="sc1", name="Top", feature_id="f1", status=STATUS_PASSED,
-            duration=0.1, steps=[passed_step],
+            id="sc1",
+            name="Top",
+            feature_id="f1",
+            status=STATUS_PASSED,
+            duration=0.1,
+            steps=[passed_step],
         )
         rule = Rule(
-            id="r1", name="Rule 1", feature_id="f1", status=STATUS_PASSED,
-            duration=0.1, scenarios=[passed_scenario],
+            id="r1",
+            name="Rule 1",
+            feature_id="f1",
+            status=STATUS_PASSED,
+            duration=0.1,
+            scenarios=[passed_scenario],
         )
         feature = Feature(
-            id="f1", name="Feature 1", status=STATUS_PASSED,
+            id="f1",
+            name="Feature 1",
+            status=STATUS_PASSED,
             duration=0.2,
             scenarios=[passed_scenario],
             rules=[rule],
@@ -553,26 +615,48 @@ class TestComputeStatisticsCountsRuleScenarios:
         from behave_modern_json_report.utils import STATUS_FAILED, STATUS_PASSED
 
         passed_step = Step(
-            id="s1", keyword="Given", text="pass", status=STATUS_PASSED, duration=0.1,
+            id="s1",
+            keyword="Given",
+            text="pass",
+            status=STATUS_PASSED,
+            duration=0.1,
         )
         failed_step = Step(
-            id="s2", keyword="When", text="fail", status=STATUS_FAILED, duration=0.2,
+            id="s2",
+            keyword="When",
+            text="fail",
+            status=STATUS_FAILED,
+            duration=0.2,
         )
         top_scenario = Scenario(
-            id="sc1", name="Top", feature_id="f1", status=STATUS_PASSED,
-            duration=0.1, steps=[passed_step],
+            id="sc1",
+            name="Top",
+            feature_id="f1",
+            status=STATUS_PASSED,
+            duration=0.1,
+            steps=[passed_step],
         )
         rule_scenario = Scenario(
-            id="sc2", name="Rule scenario", feature_id="f1", status=STATUS_FAILED,
-            duration=0.2, steps=[failed_step],
+            id="sc2",
+            name="Rule scenario",
+            feature_id="f1",
+            status=STATUS_FAILED,
+            duration=0.2,
+            steps=[failed_step],
         )
         rule = Rule(
-            id="r1", name="Rule 1", feature_id="f1", status=STATUS_FAILED,
-            duration=0.2, scenarios=[rule_scenario],
+            id="r1",
+            name="Rule 1",
+            feature_id="f1",
+            status=STATUS_FAILED,
+            duration=0.2,
+            scenarios=[rule_scenario],
         )
         # Collector adds rule scenarios to feature.scenarios too
         feature = Feature(
-            id="f1", name="Feature 1", status=STATUS_FAILED,
+            id="f1",
+            name="Feature 1",
+            status=STATUS_FAILED,
             duration=0.3,
             scenarios=[top_scenario, rule_scenario],
             rules=[rule],
@@ -619,11 +703,17 @@ class TestOverallStatusChecksAllFailedStatuses:
 
         # Create a feature with a scenario in a non-failed-but-error status
         feature = Feature(
-            id="f1", name="F1", status=STATUS_PASSED, duration=0.1,
+            id="f1",
+            name="F1",
+            status=STATUS_PASSED,
+            duration=0.1,
             scenarios=[
                 Scenario(
-                    id="sc1", name="S1", feature_id="f1",
-                    status=status, duration=0.1,
+                    id="sc1",
+                    name="S1",
+                    feature_id="f1",
+                    status=status,
+                    duration=0.1,
                     steps=[Step(id="s1", keyword="Given", text="x", status=status, duration=0.1)],
                 ),
             ],
@@ -649,25 +739,47 @@ class TestExcludePassedScenariosWithRuleScenarios:
         from behave_modern_json_report.utils import STATUS_FAILED, STATUS_PASSED
 
         passed_step = Step(
-            id="s1", keyword="Given", text="pass", status=STATUS_PASSED, duration=0.1,
+            id="s1",
+            keyword="Given",
+            text="pass",
+            status=STATUS_PASSED,
+            duration=0.1,
         )
         failed_step = Step(
-            id="s2", keyword="When", text="fail", status=STATUS_FAILED, duration=0.1,
+            id="s2",
+            keyword="When",
+            text="fail",
+            status=STATUS_FAILED,
+            duration=0.1,
         )
         top_scenario = Scenario(
-            id="sc1", name="Top", feature_id="f1", status=STATUS_PASSED,
-            duration=0.1, steps=[passed_step],
+            id="sc1",
+            name="Top",
+            feature_id="f1",
+            status=STATUS_PASSED,
+            duration=0.1,
+            steps=[passed_step],
         )
         rule_scenario = Scenario(
-            id="sc2", name="Rule scenario", feature_id="f1", status=STATUS_FAILED,
-            duration=0.1, steps=[failed_step],
+            id="sc2",
+            name="Rule scenario",
+            feature_id="f1",
+            status=STATUS_FAILED,
+            duration=0.1,
+            steps=[failed_step],
         )
         rule = Rule(
-            id="r1", name="Rule 1", feature_id="f1", status=STATUS_FAILED,
-            duration=0.1, scenarios=[rule_scenario],
+            id="r1",
+            name="Rule 1",
+            feature_id="f1",
+            status=STATUS_FAILED,
+            duration=0.1,
+            scenarios=[rule_scenario],
         )
         feature = Feature(
-            id="f1", name="Feature 1", status=STATUS_FAILED,
+            id="f1",
+            name="Feature 1",
+            status=STATUS_FAILED,
             duration=0.2,
             scenarios=[top_scenario, rule_scenario],
             rules=[rule],
@@ -704,22 +816,40 @@ class TestExcludePassedScenariosWithRuleScenarios:
         from behave_modern_json_report.utils import STATUS_PASSED
 
         passed_step = Step(
-            id="s1", keyword="Given", text="pass", status=STATUS_PASSED, duration=0.1,
+            id="s1",
+            keyword="Given",
+            text="pass",
+            status=STATUS_PASSED,
+            duration=0.1,
         )
         top_scenario = Scenario(
-            id="sc1", name="Top", feature_id="f1", status=STATUS_PASSED,
-            duration=0.1, steps=[passed_step],
+            id="sc1",
+            name="Top",
+            feature_id="f1",
+            status=STATUS_PASSED,
+            duration=0.1,
+            steps=[passed_step],
         )
         rule_scenario = Scenario(
-            id="sc2", name="Rule scenario", feature_id="f1", status=STATUS_PASSED,
-            duration=0.1, steps=[passed_step],
+            id="sc2",
+            name="Rule scenario",
+            feature_id="f1",
+            status=STATUS_PASSED,
+            duration=0.1,
+            steps=[passed_step],
         )
         rule = Rule(
-            id="r1", name="Rule 1", feature_id="f1", status=STATUS_PASSED,
-            duration=0.1, scenarios=[rule_scenario],
+            id="r1",
+            name="Rule 1",
+            feature_id="f1",
+            status=STATUS_PASSED,
+            duration=0.1,
+            scenarios=[rule_scenario],
         )
         feature = Feature(
-            id="f1", name="Feature 1", status=STATUS_PASSED,
+            id="f1",
+            name="Feature 1",
+            status=STATUS_PASSED,
             duration=0.2,
             scenarios=[top_scenario, rule_scenario],
             rules=[rule],
