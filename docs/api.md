@@ -16,7 +16,7 @@ from behave_modern_json_report import (
 
 ### `SCHEMA_VERSION`
 
-The current schema version string (e.g. `"1.0.0"`).
+The current schema version string (e.g. `"1.1.0"`).
 
 ### `serialize(report, *, options=None) -> str`
 
@@ -166,7 +166,6 @@ CucumberSerializerOptions(
     ensure_ascii=False,
     embed_attachments=True,
     include_output=True,
-    include_hooks=True,
     include_background=True,
     duration_in_nanos=True,
 )
@@ -200,6 +199,7 @@ All models are dataclasses defined in `models.py`:
 - `Statistics` — aggregate stats
 - `Environment` — runtime environment
 - `Feature` — Gherkin feature
+- `Rule` — Gherkin v6 rule grouping scenarios
 - `Scenario` — scenario or outline example
 - `Step` — step
 - `Error` — structured error
