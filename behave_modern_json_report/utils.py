@@ -54,7 +54,6 @@ _FAILED_STATUSES: frozenset[str] = frozenset(
         STATUS_ERROR,
         STATUS_HOOK_ERROR,
         STATUS_CLEANUP_ERROR,
-        STATUS_XFAILED,
     }
 )
 
@@ -96,7 +95,7 @@ def monotonic_seconds(start: float | None = None) -> float:
     return round(time.monotonic() - (start if start is not None else 0.0), 6)
 
 
-def format_duration(seconds: float) -> str:
+def format_duration(seconds: float | None) -> str:
     """Format a duration in seconds as a human-readable string."""
     if seconds is None:
         return "0ms"

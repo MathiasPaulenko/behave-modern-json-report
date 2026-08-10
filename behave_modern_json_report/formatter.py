@@ -12,6 +12,7 @@ The formatter is a thin adapter: it delegates event collection to
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import sys
 from typing import Any
@@ -106,8 +107,6 @@ def _metadata_from_config(config: Any) -> dict[str, Any]:
     if not callable(get):
         return {}
     with contextlib.suppress(Exception):
-        import json
-
         raw = get("metadata", "")
         if raw and raw.strip():
             data = json.loads(raw)
@@ -161,7 +160,7 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
     We implement the common lifecycle hooks and ignore those we do not need.
     """
 
-    name = "json-modern"
+    name = "modern-json"
     description = "Modern JSON execution report for Behave"
 
     def __init__(

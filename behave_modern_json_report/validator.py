@@ -158,6 +158,48 @@ def _structural_validate(data: Any, result: ValidationResult, path: str = "") ->
             _check_number(feature, "duration", result, fp, required=True)
             _check_array(feature, "scenarios", result, fp, required=True)
 
+            # Validate rules array if present
+            rules = feature.get("rules")
+            if isinstance(rules, list):
+                for r, rule in enumerate(rules):
+                    rp = f"{fp}.rules[{r}]"
+                    if not isinstance(rule, dict):
+                        result.add(rp, "expected an object")
+                        continue
+                    _check_str(rule, "id", result, rp, required=True)
+                    _check_str(rule, "name", result, rp, required=True)
+                    _check_str(rule, "featureId", result, rp, required=True)
+                    _check_str(rule, "status", result, rp, required=True)
+                    _check_number(rule, "duration", result, rp, required=True)
+                    _check_array(rule, "scenarios", result, rp, required=True)
+
+                    rule_scenarios = rule.get("scenarios")
+                    if isinstance(rule_scenarios, list):
+                        for j, sc in enumerate(rule_scenarios):
+                            sp2 = f"{rp}.scenarios[{j}]"
+                            if not isinstance(sc, dict):
+                                result.add(sp2, "expected an object")
+                                continue
+                            _check_str(sc, "id", result, sp2, required=True)
+                            _check_str(sc, "name", result, sp2, required=True)
+                            _check_str(sc, "featureId", result, sp2, required=True)
+                            _check_str(sc, "status", result, sp2, required=True)
+                            _check_number(sc, "duration", result, sp2, required=True)
+                            _check_array(sc, "steps", result, sp2, required=True)
+
+                            steps = sc.get("steps")
+                            if isinstance(steps, list):
+                                for k, step in enumerate(steps):
+                                    stp = f"{sp2}.steps[{k}]"
+                                    if not isinstance(step, dict):
+                                        result.add(stp, "expected an object")
+                                        continue
+                                    _check_str(step, "id", result, stp, required=True)
+                                    _check_str(step, "keyword", result, stp, required=True)
+                                    _check_str(step, "text", result, stp, required=True)
+                                    _check_str(step, "status", result, stp, required=True)
+                                    _check_number(step, "duration", result, stp, required=True)
+
             scenarios = feature.get("scenarios")
             if isinstance(scenarios, list):
                 for j, sc in enumerate(scenarios):

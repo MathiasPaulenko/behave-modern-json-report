@@ -20,6 +20,8 @@ still be installed/tested without Behave being present.
 from __future__ import annotations
 
 import base64
+import io
+import json
 import mimetypes
 from pathlib import Path
 from typing import Any
@@ -93,8 +95,6 @@ def attach_json(context: Any, data: Any, name: str = "data.json") -> None:
         data: Any object that can be passed to ``json.dumps``.
         name: Display name for the attachment. Defaults to ``data.json``.
     """
-    import json
-
     formatter = _find_formatter(context)
     if formatter is None:
         return
@@ -143,8 +143,6 @@ def attach_screenshot(context: Any, source: Any, name: str = "screenshot.png") -
         if data is None:
             save = getattr(source, "save", None)
             if callable(save):
-                import io
-
                 buf = io.BytesIO()
                 save(buf, format="PNG")
                 data = buf.getvalue()
