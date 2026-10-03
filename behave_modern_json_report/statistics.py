@@ -12,11 +12,13 @@ from .models import ExecutionReport, Feature, Rule, Scenario, Statistics
 from .utils import (
     _FAILED_STATUSES,
     ALL_STATUSES,
+    STATUS_ERROR,
     STATUS_FAILED,
     STATUS_PASSED,
     STATUS_PENDING,
     STATUS_SKIPPED,
     STATUS_UNDEFINED,
+    STATUS_UNTESTED,
 )
 
 _STATUS_FIELDS = {
@@ -120,6 +122,23 @@ def compute_statistics(report: ExecutionReport) -> Statistics:
     )
 
 
+def _derive_status(statuses: list[str]) -> str:
+    """Derive an entity status from child statuses.
+
+    Mirrors Behave's semantics: an ``undefined`` or ``pending`` step marks the
+    scenario as ``error`` (it is reported as an errored scenario by Behave).
+    """
+    if any(s in _FAILED_STATUSES for s in statuses):
+        return STATUS_FAILED
+    if any(s in (STATUS_UNDEFINED, STATUS_PENDING) for s in statuses):
+        return STATUS_ERROR
+    if statuses and all(s == STATUS_SKIPPED for s in statuses):
+        return STATUS_SKIPPED
+    if any(s == STATUS_UNTESTED for s in statuses):
+        return STATUS_UNTESTED
+    return STATUS_PASSED
+
+
 def feature_status(feature: Feature) -> str:
     """Derive a feature status from its scenarios.
 
@@ -127,38 +146,17 @@ def feature_status(feature: Feature) -> str:
     including those that also belong to a rule, so iterating the
     single list is sufficient.
     """
-    for scenario in feature.scenarios:
-        if scenario.status in _FAILED_STATUSES:
-            return STATUS_FAILED
-    if feature.scenarios and all(s.status == STATUS_SKIPPED for s in feature.scenarios):
-        return STATUS_SKIPPED
-    if not feature.scenarios:
-        return STATUS_PASSED
-    return STATUS_PASSED
+    return _derive_status([s.status for s in feature.scenarios])
 
 
 def scenario_status(scenario: Scenario) -> str:
     """Derive a scenario status from its steps."""
-    for step in scenario.steps:
-        if step.status in _FAILED_STATUSES:
-            return STATUS_FAILED
-    if scenario.steps and all(s.status == STATUS_SKIPPED for s in scenario.steps):
-        return STATUS_SKIPPED
-    if not scenario.steps:
-        return STATUS_PASSED
-    return STATUS_PASSED
+    return _derive_status([s.status for s in scenario.steps])
 
 
 def rule_status(rule: Rule) -> str:
     """Derive a rule status from its scenarios."""
-    for scenario in rule.scenarios:
-        if scenario.status in _FAILED_STATUSES:
-            return STATUS_FAILED
-    if rule.scenarios and all(s.status == STATUS_SKIPPED for s in rule.scenarios):
-        return STATUS_SKIPPED
-    if not rule.scenarios:
-        return STATUS_PASSED
-    return STATUS_PASSED
+    return _derive_status([s.status for s in rule.scenarios])
 
 
 __all__ = [

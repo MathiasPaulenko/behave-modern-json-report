@@ -203,11 +203,13 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
         pass
 
     def feature(self, feature: Any) -> None:
-        # Finalize previous scenario and feature if any
+        # Finalize previous scenario and feature if any.  The collector keeps
+        # a reference to the previous Behave objects, so pass ``None`` here:
+        # ``feature`` is the *new* feature, not the one that just ended.
         if self._collector._current_scenario is not None:
-            self._collector.end_scenario(feature)
+            self._collector.end_scenario(None)
         if self._collector._current_feature is not None:
-            self._collector.end_feature(feature)
+            self._collector.end_feature(None)
         self._collector.start_feature(feature)
 
     def background(self, background: Any) -> None:
@@ -216,10 +218,13 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
     def rule(self, rule: Any) -> None:
         self._collector.start_rule(rule)
 
+    def rule_finished(self) -> None:
+        self._collector.end_rule()
+
     def scenario(self, scenario: Any) -> None:
         # Finalize previous scenario if any
         if self._collector._current_scenario is not None:
-            self._collector.end_scenario(scenario)
+            self._collector.end_scenario(None)
         self._collector.start_scenario(scenario)
 
     def step(self, step: Any) -> None:

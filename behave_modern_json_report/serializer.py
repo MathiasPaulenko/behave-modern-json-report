@@ -103,8 +103,8 @@ class SerializerOptions:
 
 
 # ---------------------------------------------------------------------------
-# Field-name mapping (snake_case → camelCase is intentionally NOT applied;
-# the canonical schema uses snake_case for stability and readability).
+# Field-name mapping (model snake_case -> JSON camelCase, as defined by the
+# canonical schema in schemas/execution.schema.json).
 # ---------------------------------------------------------------------------
 
 

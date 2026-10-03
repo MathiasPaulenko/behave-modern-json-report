@@ -9,6 +9,7 @@ example feature files and writes the report to report.json.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,10 +19,7 @@ EXAMPLE_DIR = Path(__file__).resolve().parent
 
 
 def main() -> int:
-    env = {
-        "PYTHONPATH": str(PROJECT_ROOT),
-        "PATH": __import__("os").environ.get("PATH", ""),
-    }
+    env = {**os.environ, "PYTHONPATH": str(PROJECT_ROOT)}
     cmd = [
         sys.executable, "-m", "behave",
         "--format", "behave_modern_json_report:ModernJSONFormatter",
@@ -32,7 +30,7 @@ def main() -> int:
     print(f"Running: {' '.join(cmd)}")
     print(f"Working dir: {EXAMPLE_DIR}")
     print()
-    result = subprocess.run(cmd, cwd=EXAMPLE_DIR, env={**__import__("os").environ, **env})
+    result = subprocess.run(cmd, cwd=EXAMPLE_DIR, env=env)
     report_path = EXAMPLE_DIR / "report.json"
     if report_path.exists():
         size = report_path.stat().st_size

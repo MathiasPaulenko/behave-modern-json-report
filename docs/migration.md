@@ -36,7 +36,7 @@ behave --format behave_modern_json_report:ModernJSONFormatter --outfile report.j
 | Root | Array of features | Object with `execution`, `statistics`, `features` |
 | Errors | Raw string in `error_message` | Structured `error` object with `type`, `message`, `traceback` |
 | IDs | Absent | Every entity has a unique `id` |
-| Schema version | Absent | `schemaVersion: "1.0.0"` |
+| Schema version | Absent | `schemaVersion: "1.2.0"` |
 | Statistics | Absent | Computed `statistics` block |
 | Environment | Absent | `environment` block |
 | Attachments | Absent | `attachments` array on steps |

@@ -20,7 +20,7 @@ Behave Events
 
 ## Design Principles
 
-1. **Behave isolation** — Only `collector.py`, `formatter.py`, and `cucumber_formatter.py` import Behave. The model, serializers, validator and statistics modules are pure Python with zero Behave dependency.
+1. **Behave isolation** — Only `formatter.py` and `cucumber_formatter.py` import Behave (`behave.formatter.base.Formatter`); `environment.py` imports Behave lazily to read its version. `collector.py` adapts Behave's duck-typed objects without importing them, and the model, serializers, validator and statistics modules are pure Python with zero Behave dependency.
 2. **Model-first** — The execution model (`models.py`) is the canonical representation. JSON is a serialization of the model, not the source of truth.
 3. **Stable identifiers** — Every entity (execution, feature, scenario, step, attachment, error) has a unique `id` that is stable within a report.
 4. **Schema versioning** — The `schemaVersion` field follows SemVer. Breaking changes require a major version bump.

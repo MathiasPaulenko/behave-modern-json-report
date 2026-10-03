@@ -1,0 +1,18 @@
+site_name: behave-modern-json-report
+site_description: Modern JSON report formatter for Behave
+repo_url: https://github.com/MathiasPaulenko/behave-modern-json-report
+
+nav:
+  - Home: index.md
+  - Schema: schema.md
+  - Architecture: architecture.md
+  - API Reference: api.md
+  - Migration Guide: migration.md
+  - Contributing: contributing.md
+
+theme:
+  name: readthedocs
+
+markdown_extensions:
+  - tables
+  - fenced_code

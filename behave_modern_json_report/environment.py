@@ -10,6 +10,7 @@ from __future__ import annotations
 import getpass
 import os
 import platform as _platform
+import shlex
 import subprocess
 import sys
 from typing import Any
@@ -122,7 +123,7 @@ def detect_environment(
         hostname=hostname(),
         ci_provider=ci_provider(),
         cwd=safe_str(os.getcwd()) or None,
-        command=" ".join(sys.argv) or None,
+        command=shlex.join(sys.argv) or None,
         user=user,
         cpu_count=cpu_count or None,
         memory_mb=memory_mb,

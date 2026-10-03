@@ -63,7 +63,7 @@ mjr.environment = staging
 mjr.build_id = local-dev
 ```
 
-All `mjr.*` keys are injected into the report's `metadata.data` block (prefix stripped). `mjr.project_name` is used as the project name.
+All `mjr.*` keys are injected into the report's `metadata` block (prefix stripped). `mjr.project_name` is used as the project name.
 
 You can also override via CLI:
 

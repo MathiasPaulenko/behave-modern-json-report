@@ -129,9 +129,9 @@ class CucumberJSONFormatter(_BaseFormatter):  # type: ignore[misc]
 
     def feature(self, feature: Any) -> None:
         if self._collector._current_scenario is not None:
-            self._collector.end_scenario(feature)
+            self._collector.end_scenario(None)
         if self._collector._current_feature is not None:
-            self._collector.end_feature(feature)
+            self._collector.end_feature(None)
         self._collector.start_feature(feature)
 
     def background(self, background: Any) -> None:
@@ -140,9 +140,12 @@ class CucumberJSONFormatter(_BaseFormatter):  # type: ignore[misc]
     def rule(self, rule: Any) -> None:
         self._collector.start_rule(rule)
 
+    def rule_finished(self) -> None:
+        self._collector.end_rule()
+
     def scenario(self, scenario: Any) -> None:
         if self._collector._current_scenario is not None:
-            self._collector.end_scenario(scenario)
+            self._collector.end_scenario(None)
         self._collector.start_scenario(scenario)
 
     def step(self, step: Any) -> None:
@@ -150,6 +153,17 @@ class CucumberJSONFormatter(_BaseFormatter):  # type: ignore[misc]
 
     def result(self, step: Any) -> None:
         self._collector.end_step(step)
+
+    # Backward-compatible aliases for programmatic use
+    def scenario_result(self, scenario: Any) -> None:
+        if self._collector._current_scenario is not None:
+            self._collector.end_scenario(scenario)
+
+    def feature_result(self, feature: Any) -> None:
+        if self._collector._current_scenario is not None:
+            self._collector.end_scenario(None)
+        if self._collector._current_feature is not None:
+            self._collector.end_feature(feature)
 
     def eof(self) -> None:
         if self._collector._current_scenario is not None:

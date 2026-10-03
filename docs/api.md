@@ -16,7 +16,7 @@ from behave_modern_json_report import (
 
 ### `SCHEMA_VERSION`
 
-The current schema version string (e.g. `"1.1.0"`).
+The current schema version string (e.g. `"1.2.0"`).
 
 ### `serialize(report, *, options=None) -> str`
 

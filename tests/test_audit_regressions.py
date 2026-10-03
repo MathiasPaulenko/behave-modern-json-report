@@ -866,5 +866,256 @@ class TestExcludePassedScenariosWithRuleScenarios:
         opts = SerializerOptions(exclude_passed_scenarios=True)
         data = Serializer(opts).to_dict(report)
 
-        # Feature must be dropped — all scenarios were passed
+        # Feature must be dropped -- all scenarios were passed
         assert len(data["features"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# Bug 7: Step results were routed to the wrong step (real Behave event order)
+#
+# Behave emits ALL step() events upfront, then result() events during
+# execution.  Results must resolve by behave-step identity, not position.
+# ---------------------------------------------------------------------------
+
+
+def _live_scenario(steps, status="failed", background=None):
+    """A behave-like scenario: steps already carry their final statuses."""
+    return SimpleNamespace(
+        name="S",
+        tags=[],
+        filename="f.feature",
+        line=3,
+        description=None,
+        examples=None,
+        steps=steps,
+        all_steps=list(steps),
+        status=status,
+        duration=0.01,
+        background=background,
+        parent=None,
+    )
+
+
+class TestRealBehaveEventOrder:
+    def test_results_routed_to_the_right_step(self):
+        """A failing middle step must fail that step, not another one."""
+        import io
+
+        from behave_modern_json_report.formatter import ModernJSONFormatter
+
+        formatter = ModernJSONFormatter(stream=io.StringIO())
+        feature = _make_feature_ns()
+        s1 = _make_step_ns()
+        s2 = _make_step_ns()
+        s3 = _make_step_ns()
+        s2.status = "failed"
+        s3.status = "skipped"
+        scenario = _live_scenario([s1, s2, s3], status="failed")
+
+        formatter.feature(feature)
+        formatter.scenario(scenario)
+        # Behave emits all step() events upfront...
+        formatter.step(s1)
+        formatter.step(s2)
+        formatter.step(s3)
+        # ...then result() events while executing.  s3 is skipped after the
+        # failure, so no result event is emitted for it.
+        formatter.result(s1)
+        formatter.result(s2)
+        formatter.eof()
+        formatter.close()
+
+        report = formatter._collector.finalize()
+        steps = report.features[0].scenarios[0].steps
+        assert [s.status for s in steps] == ["passed", "failed", "skipped"]
+        assert report.features[0].scenarios[0].status == "failed"
+        assert report.execution.status == "failed"
+
+    def test_skipped_steps_without_result_are_reconciled(self):
+        """Steps skipped after a failure get no result() but must not be 'passed'."""
+        import io
+
+        from behave_modern_json_report.formatter import ModernJSONFormatter
+
+        formatter = ModernJSONFormatter(stream=io.StringIO())
+        s1 = _make_step_ns()
+        s2 = _make_step_ns()
+        s3 = _make_step_ns()
+        s1.status = "failed"
+        s2.status = "skipped"
+        s3.status = "skipped"
+        scenario = _live_scenario([s1, s2, s3], status="failed")
+
+        formatter.feature(_make_feature_ns())
+        formatter.scenario(scenario)
+        formatter.step(s1)
+        formatter.step(s2)
+        formatter.step(s3)
+        # Only the failed step produces a result event.
+        formatter.result(s1)
+        formatter.eof()
+        formatter.close()
+
+        report = formatter._collector.finalize()
+        steps = report.features[0].scenarios[0].steps
+        assert [s.status for s in steps] == ["failed", "skipped", "skipped"]
+
+    def test_undefined_step_marks_scenario_error(self):
+        """Behave marks scenarios with undefined steps as 'error'."""
+        import io
+
+        from behave_modern_json_report.formatter import ModernJSONFormatter
+
+        formatter = ModernJSONFormatter(stream=io.StringIO())
+        s1 = _make_step_ns()
+        s2 = _make_step_ns()
+        s1.status = "undefined"
+        s2.status = "skipped"
+        scenario = _live_scenario([s1, s2], status="error")
+
+        formatter.feature(_make_feature_ns())
+        formatter.scenario(scenario)
+        formatter.step(s1)
+        formatter.step(s2)
+        formatter.result(s1)
+        formatter.eof()
+        formatter.close()
+
+        report = formatter._collector.finalize()
+        scenario_out = report.features[0].scenarios[0]
+        assert scenario_out.steps[0].status == "undefined"
+        assert scenario_out.steps[1].status == "skipped"
+        assert scenario_out.status == "error"
+
+
+class TestPendingAttachmentRouting:
+    def test_attachment_added_during_step_goes_to_executing_step(self):
+        """Hooks run while a step executes; the attachment must land there."""
+        import io
+
+        from behave_modern_json_report.formatter import ModernJSONFormatter
+
+        formatter = ModernJSONFormatter(stream=io.StringIO())
+        s1 = _make_step_ns()
+        s2 = _make_step_ns()
+        scenario = _live_scenario([s1, s2], status="passed")
+
+        formatter.feature(_make_feature_ns())
+        formatter.scenario(scenario)
+        formatter.step(s1)
+        formatter.step(s2)
+        # after_step hook for s1 fires before result(s1)
+        formatter.add_attachment(
+            name="shot.png", mime_type="image/png", content="AA==", encoding="base64"
+        )
+        formatter.result(s1)
+        formatter.result(s2)
+        formatter.eof()
+        formatter.close()
+
+        report = formatter._collector.finalize()
+        steps = report.features[0].scenarios[0].steps
+        assert len(steps[0].attachments) == 1
+        assert steps[0].attachments[0].name == "shot.png"
+        assert not steps[1].attachments
+
+
+class TestRuntimeOutlineDetection:
+    def _outline_row_scenario(self):
+        outline = SimpleNamespace(
+            name="My Outline",
+            type="scenario_outline",
+            tags=["outline-tag"],
+        )
+        row = SimpleNamespace(
+            id="1.2",
+            cells=["a", "b"],
+            as_dict=lambda: {"col1": "a", "col2": "b"},
+        )
+        return SimpleNamespace(
+            name="My Outline -- @1.2 ",
+            tags=["outline-tag", "row-tag"],
+            filename="f.feature",
+            line=10,
+            description=None,
+            examples=None,
+            steps=[],
+            all_steps=[],
+            status="passed",
+            duration=0.01,
+            background=None,
+            parent=outline,
+            _row=row,
+        )
+
+    def test_row_scenario_detected_as_outline(self):
+        from behave_modern_json_report.collector import Collector
+
+        collector = Collector()
+        collector.start_feature(_make_feature_ns())
+        sc = collector.start_scenario(self._outline_row_scenario())
+        assert sc is not None
+        assert sc.is_outline is True
+        assert sc.outline_name == "My Outline"
+
+    def test_row_values_extracted_as_examples(self):
+        from behave_modern_json_report.collector import Collector
+
+        collector = Collector()
+        collector.start_feature(_make_feature_ns())
+        sc = collector.start_scenario(self._outline_row_scenario())
+        assert sc.examples[0]["rowId"] == "1.2"
+        assert sc.examples[0]["col1"] == "a"
+
+    def test_example_tags_differ_from_outline_tags(self):
+        from behave_modern_json_report.collector import Collector
+
+        collector = Collector()
+        collector.start_feature(_make_feature_ns())
+        sc = collector.start_scenario(self._outline_row_scenario())
+        assert sc.example_tags == ["row-tag"]
+
+
+class TestRuleFinishedHook:
+    def test_rule_finished_ends_rule(self):
+        import io
+
+        from behave_modern_json_report.formatter import ModernJSONFormatter
+
+        formatter = ModernJSONFormatter(stream=io.StringIO())
+        feature = SimpleNamespace(
+            name="F",
+            tags=[],
+            filename="f.feature",
+            line=1,
+            description=None,
+            background=None,
+            status="passed",
+            duration=0.05,
+        )
+        rule = _behave_rule("My Rule")
+
+        formatter.feature(feature)
+        formatter.rule(rule)
+        formatter.rule_finished()
+        formatter.eof()
+        formatter.close()
+
+        report = formatter._collector.finalize()
+        rules = report.features[0].rules
+        assert len(rules) == 1
+        assert rules[0].name == "My Rule"
+        assert rules[0].status == "passed"
+
+    def test_cucumber_formatter_has_rule_finished(self):
+        import io
+
+        fmt = CucumberJSONFormatter(stream=io.StringIO())
+        assert hasattr(fmt, "rule_finished")
+
+    def test_cucumber_formatter_has_result_aliases(self):
+        import io
+
+        fmt = CucumberJSONFormatter(stream=io.StringIO())
+        assert hasattr(fmt, "scenario_result")
+        assert hasattr(fmt, "feature_result")

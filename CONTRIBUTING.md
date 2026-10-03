@@ -117,7 +117,7 @@ The JSON output format is versioned via `schemaVersion`. Any change to the
 output structure requires:
 
 1. A schema version bump in `behave_modern_json_report/schema.py`
-2. Updated `$defs` in `schemas/execution.schema.json`
+2. Updated `$defs` in `behave_modern_json_report/schemas/execution.schema.json`
 3. Updated tests in `tests/test_validator.py`
 4. A note in `CHANGELOG.md` under a new version heading
 

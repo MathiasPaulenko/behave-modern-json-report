@@ -238,7 +238,7 @@ def _check_str(
 ) -> None:
     if key not in data:
         if required:
-            result.add(f"{path}.{key}", "is required")
+            result.add(f"{path}.{key}", f"'{key}' is required")
         return
     if not isinstance(data[key], str):
         result.add(f"{path}.{key}", f"expected string, got {type(data[key]).__name__}")
@@ -254,7 +254,7 @@ def _check_number(
 ) -> None:
     if key not in data:
         if required:
-            result.add(f"{path}.{key}", "is required")
+            result.add(f"{path}.{key}", f"'{key}' is required")
         return
     if not isinstance(data[key], (int, float)):
         result.add(f"{path}.{key}", f"expected number, got {type(data[key]).__name__}")
@@ -270,7 +270,7 @@ def _check_int(
 ) -> None:
     if key not in data:
         if required:
-            result.add(f"{path}.{key}", "is required")
+            result.add(f"{path}.{key}", f"'{key}' is required")
         return
     if not isinstance(data[key], int) or isinstance(data[key], bool):
         result.add(f"{path}.{key}", f"expected integer, got {type(data[key]).__name__}")
@@ -286,7 +286,7 @@ def _check_object(
 ) -> None:
     if key not in data:
         if required:
-            result.add(f"{path}.{key}", "is required")
+            result.add(f"{path}.{key}", f"'{key}' is required")
         return
     if not isinstance(data[key], dict):
         result.add(f"{path}.{key}", f"expected object, got {type(data[key]).__name__}")
@@ -302,7 +302,7 @@ def _check_array(
 ) -> None:
     if key not in data:
         if required:
-            result.add(f"{path}.{key}", "is required")
+            result.add(f"{path}.{key}", f"'{key}' is required")
         return
     if not isinstance(data[key], list):
         result.add(f"{path}.{key}", f"expected array, got {type(data[key]).__name__}")

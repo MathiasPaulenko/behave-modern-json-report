@@ -42,7 +42,7 @@ It is the data foundation for:
 - **Zero Behave dependency** in the serializer — the JSON model is portable
 - **JSON Schema** validation with helpful error messages
 - **Configurable** — pretty/compact, embed/exclude attachments, exclude passed scenarios
-- **Production-ready** — 174 tests, lint, type-check, CI
+- **Production-ready** — 184 tests, lint, type-check, CI
 
 ## Installation
 
@@ -73,21 +73,33 @@ pip install behave-modern-json-report[dev]
 ### As a Behave formatter (modern JSON)
 
 ```bash
-# Short format name (via entry point)
-behave --format modern-json --outfile report.json
-
 # Full module path (always works)
 behave --format behave_modern_json_report:ModernJSONFormatter --outfile report.json
+
+# Short format name (requires registration, see below)
+behave --format modern-json --outfile report.json
 ```
 
 ### As a Behave formatter (Cucumber JSON)
 
 ```bash
-# Short format name (via entry point)
-behave --format cucumber-json --outfile cucumber.json
-
 # Full module path (always works)
 behave --format behave_modern_json_report:CucumberJSONFormatter --outfile cucumber.json
+
+# Short format name (requires registration, see below)
+behave --format cucumber-json --outfile cucumber.json
+```
+
+### Short format names
+
+Behave does not discover formatter entry points from installed packages. To use
+the short names `modern-json` and `cucumber-json`, register them in your
+`behave.ini` (or `.behaverc`):
+
+```ini
+[behave.formatters]
+modern-json = behave_modern_json_report.formatter:ModernJSONFormatter
+cucumber-json = behave_modern_json_report.cucumber_formatter:CucumberJSONFormatter
 ```
 
 The Cucumber JSON format is compatible with tools that consume Cucumber JSON reports:
@@ -116,7 +128,7 @@ All keys prefixed with `mjr.` are automatically injected into the report's `meta
 ```json
 {
   "execution": { "projectName": "My Project" },
-  "metadata": { "data": { "branch": "dev", "team": "qa", "environment": "staging", "build_id": "42" } }
+  "metadata": { "branch": "dev", "team": "qa", "environment": "staging", "build_id": "42" }
 }
 ```
 
@@ -268,11 +280,9 @@ def after_step(context, step):
     }
   ],
   "metadata": {
-    "data": {
-      "browser": "Chrome",
-      "environment": "QA",
-      "branch": "main"
-    }
+    "browser": "Chrome",
+    "environment": "QA",
+    "branch": "main"
   }
 }
 ```

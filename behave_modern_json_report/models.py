@@ -13,6 +13,7 @@ from typing import Any
 
 from .utils import (
     STATUS_PASSED,
+    STATUS_UNTESTED,
 )
 
 # ---------------------------------------------------------------------------
@@ -109,7 +110,7 @@ class Step:
     id: str
     keyword: str
     text: str
-    status: str = STATUS_PASSED
+    status: str = STATUS_UNTESTED
     duration: float = 0.0
     location: Location | None = None
     error: Error | None = None

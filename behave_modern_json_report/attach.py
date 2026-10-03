@@ -10,7 +10,7 @@ Usage in ``environment.py``::
 
     def after_step(context, step):
         if step.status == "failed":
-            attach_screenshot(context, name="failure.png")
+            attach_screenshot(context, context.driver, name="failure.png")
             log(context, f"URL at failure: {getattr(context, 'url', 'unknown')}")
 
 The helpers are intentionally tolerant to import-time behaviour: the project can
@@ -57,14 +57,15 @@ def attach_file(context: Any, path: str | Path, name: str | None = None) -> None
     if formatter is None:
         return
     p = Path(path)
-    data = base64.b64encode(p.read_bytes()).decode("ascii")
+    raw = p.read_bytes()
+    data = base64.b64encode(raw).decode("ascii")
     mime = guess_mime(p.name)
     formatter.add_attachment(
         name=name or p.name,
         mime_type=mime,
         content=data,
         encoding="base64",
-        size=p.stat().st_size,
+        size=len(raw),
     )
 
 
