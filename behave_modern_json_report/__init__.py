@@ -50,7 +50,7 @@ from .schema import SCHEMA_VERSION
 from .serializer import Serializer, SerializerOptions, serialize
 from .validator import ValidationResult, validate_dict, validate_json, validate_report
 
-__version__ = "2.5.0"
+__version__ = "1.3.0"
 
 __all__ = [
     "SCHEMA_VERSION",
