@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-10-03
+
+### Fixed
+
+- **Step results were never applied**: Behave emits all `step()` events before execution and `result()` events during it, so results were routed to the wrong step and then dropped. Every step reported `passed` with no error, even for failing or undefined steps. Results are now resolved by Behave step identity.
+- **Skipped and undefined steps reported as `passed`**: steps that never produce a `result()` event (skipped after a failure, tag/hook-skipped) are now reconciled at scenario end from `scenario.all_steps` and keep their real status.
+- **Scenario, feature and rule statuses** now prefer the Behave object's own status, so `error`, `hook_error` and `cleanup_error` propagate correctly. The derived fallback no longer collapses `undefined`/`pending`/`untested` into `passed` — it follows Behave semantics (`undefined`/`pending` steps mark the scenario `error`).
+- **`isOutline`, `outlineName`, `examples` and `exampleTags`** were never populated in real runs: Behave builds example rows as plain `Scenario` objects. They are now detected via the `_row` attribute and the `ScenarioOutline` parent, including the example row values (`rowId` plus the row cells) and Example-block tags.
+- **Background steps reported `untested` forever**: the background snapshot is now synced with the statuses the steps actually got inside each scenario.
+- **`rule_finished()` hook added**: Behave calls it when a rule ends. `rule.duration` no longer absorbs scenarios from outside the rule.
+- **Attachments and logs from hooks** (`before_scenario`, `after_step`, `after_scenario`, …) were silently dropped or bound to the wrong step. They are now buffered and bound to the step that is actually executing.
+- **`CucumberJSONFormatter`** gained the `scenario_result` and `feature_result` aliases that `ModernJSONFormatter` already had.
+- **Short format names were unusable**: Behave does not read `behave.formatters` entry points from installed packages, so `--format modern-json` failed. Short names must be registered in a `[behave.formatters]` section of `behave.ini`; the dead `entry-points` declaration was removed and the README now documents the working mechanism.
+- **Structural validator**: required-field errors now include the field name in the message (the jsonschema path already did).
+- **`Step.status` default** is now `untested` instead of `passed`.
+- **`untested_undefined`** (Behave `--dry-run` status) now maps to `untested` instead of leaking a value outside the schema enum.
+- **`__version__`** matched `pyproject.toml` again (`1.2.0`).
+
+### Documentation
+
+- `docs/schema.md` rewritten for schema `1.2.0` (rules, backgrounds, new statistics/environment fields, full status list).
+- `README.md`, `docs/migration.md` and the example `README` showed `metadata` wrapped in a `data` object; the actual output is flat.
+- `CONTRIBUTING.md` / `docs/contributing.md`: fixed the non-existent second schema path and the outdated manual release process (releases are automated via `release.yml`).
+- `SECURITY.md` supported-versions table updated to `1.2.x`.
+- `CHANGELOG.md` date for `1.1.0` corrected (it predated `1.0.0`).
+
 ## [1.2.0] - 2026-08-10
 
 ### Added
@@ -43,7 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **License declaration modernized** (PEP 639): `license = { text = "MIT" }` replaced with `license = "MIT"` and deprecated `License ::` classifier removed from `pyproject.toml`.
 - **`schemas` subpackage** explicitly declared in `pyproject.toml` to eliminate setuptools warning about ambiguous package configuration.
 
-## [1.1.0] - 2025-01-15
+## [1.1.0] - 2026-07-20
 
 ### Added
 

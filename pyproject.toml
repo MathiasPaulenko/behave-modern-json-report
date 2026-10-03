@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "behave-modern-json-report"
-version = "1.2.0"
+version = "2.5.0"
 description = "Modern JSON report formatter for Behave that generates a rich, structured execution model."
 readme = "README.md"
 license = "MIT"
@@ -57,10 +57,6 @@ Homepage = "https://github.com/MathiasPaulenko/behave-modern-json-report"
 Repository = "https://github.com/MathiasPaulenko/behave-modern-json-report"
 Issues = "https://github.com/MathiasPaulenko/behave-modern-json-report/issues"
 Changelog = "https://github.com/MathiasPaulenko/behave-modern-json-report/blob/main/CHANGELOG.md"
-
-[project.entry-points."behave.formatters"]
-modern-json = "behave_modern_json_report.formatter:ModernJSONFormatter"
-cucumber-json = "behave_modern_json_report.cucumber_formatter:CucumberJSONFormatter"
 
 [tool.setuptools]
 packages = ["behave_modern_json_report", "behave_modern_json_report.schemas"]
