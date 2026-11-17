@@ -6,6 +6,8 @@ The aggregator walks features → scenarios → steps and produces a
 
 from __future__ import annotations
 
+import math
+from collections.abc import Iterator
 from typing import Any
 
 from .models import ExecutionReport, Feature, Rule, Scenario, Statistics
@@ -19,6 +21,7 @@ from .utils import (
     STATUS_SKIPPED,
     STATUS_UNDEFINED,
     STATUS_UNTESTED,
+    STATUS_XPASSED,
 )
 
 _STATUS_FIELDS = {
@@ -30,6 +33,26 @@ _STATUS_FIELDS = {
 }
 
 
+def _iter_feature_scenarios(feature: Feature) -> Iterator[Scenario]:
+    """Yield a feature's scenarios without double-counting rule entries.
+
+    The collector appends every scenario to ``feature.scenarios`` — including
+    those that also belong to a rule — while hand-built models may keep them
+    only inside ``rule.scenarios``. Iterating both lists while deduplicating
+    by object identity covers either convention.
+    """
+    seen: set[int] = set()
+    for scenario in feature.scenarios or []:
+        if id(scenario) not in seen:
+            seen.add(id(scenario))
+            yield scenario
+    for rule in feature.rules or []:
+        for scenario in rule.scenarios or []:
+            if id(scenario) not in seen:
+                seen.add(id(scenario))
+                yield scenario
+
+
 def _tag_stats() -> dict[str, Any]:
     """Return a fresh counters dict for a single tag."""
     stats: dict[str, Any] = {"count": 0, "duration": 0.0}
@@ -39,6 +62,8 @@ def _tag_stats() -> dict[str, Any]:
 
 def compute_statistics(report: ExecutionReport) -> Statistics:
     """Compute aggregate statistics for ``report``."""
+    if not isinstance(report, ExecutionReport):
+        raise TypeError(f"report must be an ExecutionReport, not {type(report).__name__}")
     features = 0
     scenarios = 0
     steps = 0
@@ -51,49 +76,79 @@ def compute_statistics(report: ExecutionReport) -> Statistics:
     all_durations: list[float] = []
     exception_counts: dict[str, int] = {}
     by_tag: dict[str, dict[str, Any]] = {}
+    xpassed = 0
 
-    for feature in report.features:
+    for feature in report.features or []:
         features += 1
         feature_duration = 0.0
 
-        # The collector appends every scenario to feature.scenarios,
-        # including those that also belong to a rule.  Iterate the
-        # single list to avoid double-counting.
-        for scenario in feature.scenarios:
+        for scenario in _iter_feature_scenarios(feature):
             scenarios += 1
             scenario_duration = 0.0
 
-            for step in scenario.steps:
+            for step in scenario.steps or []:
                 steps += 1
                 field_name = _STATUS_FIELDS.get(step.status)
                 if field_name is not None:
                     counts[field_name] += 1
-                scenario_duration += step.duration or 0.0
+                elif step.status == STATUS_XPASSED:
+                    xpassed += 1
+                step_duration = step.duration
+                if (
+                    not isinstance(step_duration, (int, float))
+                    or isinstance(step_duration, bool)
+                    or not math.isfinite(step_duration)
+                ):
+                    step_duration = 0.0
+                scenario_duration += step_duration
                 if step.status in _FAILED_STATUSES:
                     error_count += 1
-                total_attachments += len(step.attachments)
-                total_logs += len(step.logs)
-                slowest_step_duration = max(slowest_step_duration, step.duration)
+                total_attachments += len(step.attachments or [])
+                total_logs += len(step.logs or [])
+                slowest_step_duration = max(slowest_step_duration, step_duration)
                 if step.error and step.error.type:
                     exception_counts[step.error.type] = exception_counts.get(step.error.type, 0) + 1
 
-            scenario.duration = scenario.duration or scenario_duration
+            existing = scenario.duration
+            if (
+                not isinstance(existing, (int, float))
+                or isinstance(existing, bool)
+                or not math.isfinite(existing)
+                or existing < 0
+            ):
+                existing = 0.0
+            scenario.duration = existing or scenario_duration
             all_durations.append(scenario.duration)
             feature_duration += scenario.duration
 
             # Tag statistics
-            for tag in set(scenario.tags) | set(feature.tags):
+            for tag in set(scenario.tags or []) | set(feature.tags or []):
                 tag_data = by_tag.setdefault(tag, _tag_stats())
                 tag_data["count"] += 1
                 tag_data["duration"] += scenario.duration
                 if scenario.status in tag_data:
                     tag_data[scenario.status] += 1
 
-        feature.duration = feature.duration or feature_duration
+        existing_feature = feature.duration
+        if (
+            not isinstance(existing_feature, (int, float))
+            or isinstance(existing_feature, bool)
+            or not math.isfinite(existing_feature)
+            or existing_feature < 0
+        ):
+            existing_feature = 0.0
+        feature.duration = existing_feature or feature_duration
         total_duration += feature.duration
 
-    total_terminal = counts["passed"] + counts["failed"]
-    pass_rate = (counts["passed"] / total_terminal) if total_terminal else 0.0
+    # passRate measures outcomes that reached a verdict. Steps that errored
+    # (error/hook_error/cleanup_error), were undefined or pending all prevent
+    # a scenario from passing, so they count as non-passing outcomes rather
+    # than vanishing from the denominator. Skipped, untested and expected-fail
+    # steps never produced a verdict and are excluded.
+    passing = counts["passed"] + xpassed
+    non_passing = error_count + counts["undefined"] + counts["pending"]
+    total_verdicts = passing + non_passing
+    pass_rate = (passing / total_verdicts) if total_verdicts else 0.0
     avg_scenario_duration = (sum(all_durations) / len(all_durations)) if all_durations else 0.0
     common_exception_type = (
         max(exception_counts, key=lambda k: exception_counts.get(k, 0))
@@ -142,21 +197,20 @@ def _derive_status(statuses: list[str]) -> str:
 def feature_status(feature: Feature) -> str:
     """Derive a feature status from its scenarios.
 
-    The collector appends every scenario to ``feature.scenarios``,
-    including those that also belong to a rule, so iterating the
-    single list is sufficient.
+    Covers scenarios listed in ``feature.scenarios`` and any that only live
+    inside ``rule.scenarios`` (hand-built models).
     """
-    return _derive_status([s.status for s in feature.scenarios])
+    return _derive_status([s.status for s in _iter_feature_scenarios(feature)])
 
 
 def scenario_status(scenario: Scenario) -> str:
     """Derive a scenario status from its steps."""
-    return _derive_status([s.status for s in scenario.steps])
+    return _derive_status([s.status for s in scenario.steps or []])
 
 
 def rule_status(rule: Rule) -> str:
     """Derive a rule status from its scenarios."""
-    return _derive_status([s.status for s in rule.scenarios])
+    return _derive_status([s.status for s in rule.scenarios or []])
 
 
 __all__ = [

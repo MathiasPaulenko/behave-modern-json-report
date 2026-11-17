@@ -50,6 +50,5 @@ coverage.xml
 Thumbs.db
 
 # Example project output
-examples/behave_project/report.json
-examples/behave_project/cucumber.json
+examples/behave_project/*.json
 examples/behave_project/*.output

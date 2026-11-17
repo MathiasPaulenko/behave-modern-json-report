@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 from typing import Any
 
 from .models import (
@@ -26,6 +27,7 @@ from .models import (
     Scenario,
     Step,
 )
+from .serializer import _sanitize_for_json
 
 # ---------------------------------------------------------------------------
 # Status mapping — our expanded statuses → Cucumber's canonical set
@@ -88,9 +90,15 @@ class CucumberSerializerOptions:
 
 def _duration(value: float, *, nanos: bool) -> int:
     """Convert seconds (float) to nanoseconds (int) or keep as seconds."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        v = 0.0
+    if not math.isfinite(v) or v < 0:
+        v = 0.0
     if nanos:
-        return int(value * 1_000_000_000)
-    return int(value)
+        return int(v * 1_000_000_000)
+    return int(v)
 
 
 def _location_str(location: Any) -> str | None:
@@ -106,9 +114,9 @@ def _location_str(location: Any) -> str | None:
     return str(filename)
 
 
-def _tags_to_cucumber(tags: list[str]) -> list[dict[str, Any]]:
+def _tags_to_cucumber(tags: list[str] | None) -> list[dict[str, Any]]:
     """Convert tag strings to Cucumber tag objects."""
-    return [{"name": tag} for tag in tags]
+    return [{"name": tag} for tag in tags or []]
 
 
 def _step_match(step: Step) -> dict[str, Any]:
@@ -172,21 +180,24 @@ def _attachments_to_embeddings(
         return None
     embeddings: list[dict[str, Any]] = []
     for att in attachments:
+        if att.content is None:
+            # External references (path/url) cannot be embedded as data;
+            # emitting the path in ``data`` would corrupt the payload for
+            # consumers expecting base64.
+            continue
         emb: dict[str, Any] = {
             "mime_type": att.mime_type,
         }
         if att.name:
             emb["name"] = att.name
-        if att.encoding == "base64" and att.content:
+        if att.encoding == "base64":
             emb["data"] = att.content
-        elif att.encoding == "raw" and att.content is not None:
-            emb["data"] = base64.b64encode(att.content.encode("utf-8")).decode("ascii")
-        elif att.content is not None:
+        elif att.encoding == "raw":
+            emb["data"] = base64.b64encode(att.content.encode("utf-8", "replace")).decode("ascii")
+        else:
             emb["data"] = att.content
-        elif att.path:
-            emb["data"] = att.path
         embeddings.append(emb)
-    return embeddings
+    return embeddings or None
 
 
 def _logs_to_output(logs: list[Any]) -> list[str] | None:
@@ -206,7 +217,7 @@ def _step_to_cucumber(step: Step, *, options: CucumberSerializerOptions) -> dict
     d: dict[str, Any] = {
         "keyword": step.keyword,
         "name": step.text,
-        "line": step.location.line if step.location else 0,
+        "line": (step.location.line if step.location else 0) or 0,
         "match": _step_match(step),
         "result": _step_result(step, nanos=options.duration_in_nanos),
     }
@@ -245,7 +256,7 @@ def _background_to_element(
         "name": bg.name,
         "description": "",
         "type": "background",
-        "line": bg.location.line if bg.location else 0,
+        "line": (bg.location.line if bg.location else 0) or 0,
         "steps": [_step_to_cucumber(s, options=options) for s in bg.steps],
     }
 
@@ -262,9 +273,9 @@ def _scenario_to_element(
         "name": scenario.name,
         "description": scenario.description or "",
         "type": "scenario",
-        "line": scenario.location.line if scenario.location else 0,
+        "line": (scenario.location.line if scenario.location else 0) or 0,
         "tags": _tags_to_cucumber(scenario.tags),
-        "steps": [_step_to_cucumber(s, options=options) for s in scenario.steps],
+        "steps": [_step_to_cucumber(s, options=options) for s in scenario.steps or []],
     }
 
     if scenario.is_outline and scenario.outline_name:
@@ -294,27 +305,40 @@ def _feature_to_cucumber(
         if bg_element is not None:
             elements.append(bg_element)
 
-    # Track which scenarios belong to rules to avoid duplicate emission
-    rule_scenario_ids: set[str] = set()
+    rules_by_id = {rule.id: rule for rule in feature.rules or []}
+    emitted_rule_bgs: set[str] = set()
 
-    # Rules with their backgrounds and scenarios
-    for rule in feature.rules:
-        # Rule background as element
+    def _emit_rule_background(rule: Any) -> None:
+        if rule.id in emitted_rule_bgs:
+            return
+        emitted_rule_bgs.add(rule.id)
         if options.include_background and rule.background is not None:
             bg_element = _background_to_element(rule.background, options=options)
             if bg_element is not None:
                 bg_element["rule"] = rule.name
                 bg_element["ruleId"] = rule.id
                 elements.append(bg_element)
-        # Rule scenarios
-        for scenario in rule.scenarios:
-            elements.append(_scenario_to_element(scenario, options=options))
-            rule_scenario_ids.add(scenario.id)
 
-    # Scenarios not belonging to any rule
-    for scenario in feature.scenarios:
-        if scenario.id not in rule_scenario_ids:
+    # Iterate feature.scenarios in document order — it already contains rule
+    # scenarios in the position they were defined/executed. A rule's
+    # background element is emitted right before its first scenario.
+    emitted: set[str] = set()
+    for scenario in feature.scenarios or []:
+        rule = rules_by_id.get(scenario.rule_id) if scenario.rule_id is not None else None
+        if rule is not None:
+            _emit_rule_background(rule)
+        elements.append(_scenario_to_element(scenario, options=options))
+        emitted.add(scenario.id)
+
+    # Scenarios only present inside rule.scenarios (hand-built models where
+    # feature.scenarios was not populated).
+    for rule in feature.rules or []:
+        for scenario in rule.scenarios or []:
+            if scenario.id in emitted:
+                continue
+            _emit_rule_background(rule)
             elements.append(_scenario_to_element(scenario, options=options))
+            emitted.add(scenario.id)
 
     return {
         "uri": feature.filename or "",
@@ -341,23 +365,32 @@ class CucumberSerializer:
 
     def to_list(self, report: ExecutionReport) -> list[dict[str, Any]]:
         """Convert an ExecutionReport to a list of Cucumber feature dicts."""
-        return [_feature_to_cucumber(feature, options=self._options) for feature in report.features]
+        if not isinstance(report, ExecutionReport):
+            raise TypeError(f"report must be an ExecutionReport, not {type(report).__name__}")
+        if report.features is not None and not isinstance(report.features, list):
+            raise TypeError("report.features must be a list")
+        return [
+            _feature_to_cucumber(feature, options=self._options)
+            for feature in report.features or []
+        ]
 
     def to_json(self, report: ExecutionReport) -> str:
         """Serialize an ExecutionReport to a Cucumber JSON string."""
-        data = self.to_list(report)
+        data = _sanitize_for_json(self.to_list(report))
         if self._options.pretty:
             return json.dumps(
                 data,
                 indent=self._options.indent,
                 sort_keys=self._options.sort_keys,
                 ensure_ascii=self._options.ensure_ascii,
+                default=str,
             )
         return json.dumps(
             data,
             sort_keys=self._options.sort_keys,
             ensure_ascii=self._options.ensure_ascii,
             separators=(",", ":"),
+            default=str,
         )
 
 

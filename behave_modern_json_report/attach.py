@@ -29,20 +29,64 @@ from typing import Any
 from .utils import guess_mime
 
 
-def _find_formatter(context: Any) -> Any:
-    """Locate the ModernJSONFormatter instance on the Behave context."""
+def _find_formatters(context: Any) -> list[Any]:
+    """Return every formatter on the Behave context that supports attachments.
+
+    Several compatible formatters may be active at once (e.g. modern JSON plus
+    Cucumber JSON, or the same formatter registered twice). Attachments must
+    reach all of them so no report silently loses data.
+
+    ``context._runner`` is a weak proxy: once the runner is gone, attribute
+    access raises ``ReferenceError`` instead of returning ``None``.
+    """
     if context is None:
-        return None
-    runner = getattr(context, "_runner", None)
-    if runner is None:
-        return None
-    formatters = getattr(runner, "formatters", None)
-    if not formatters:
-        return None
+        return []
+    try:
+        runner = getattr(context, "_runner", None)
+        formatters = getattr(runner, "formatters", None) if runner is not None else None
+        if not formatters:
+            return []
+    except Exception:
+        return []
+    result: list[Any] = []
+    seen: set[int] = set()
     for fmt in formatters:
-        if hasattr(fmt, "add_attachment") and hasattr(fmt, "add_log"):
-            return fmt
-    return None
+        try:
+            if id(fmt) in seen:
+                continue
+            if hasattr(fmt, "add_attachment") and hasattr(fmt, "add_log"):
+                seen.add(id(fmt))
+                result.append(fmt)
+        except Exception:
+            continue
+    return result
+
+
+def _broadcast_attachment(formatters: list[Any], **kwargs: Any) -> None:
+    """Deliver an attachment to every formatter.
+
+    A single misbehaving formatter must not starve the others, so each call
+    is isolated.
+    """
+    for formatter in formatters:
+        try:
+            formatter.add_attachment(**kwargs)
+        except Exception:
+            continue
+
+
+def _broadcast_log(formatters: list[Any], **kwargs: Any) -> None:
+    for formatter in formatters:
+        try:
+            formatter.add_log(**kwargs)
+        except Exception:
+            continue
+
+
+def _find_formatter(context: Any) -> Any:
+    """Locate the first compatible formatter on the Behave context."""
+    formatters = _find_formatters(context)
+    return formatters[0] if formatters else None
 
 
 def attach_file(context: Any, path: str | Path, name: str | None = None) -> None:
@@ -53,14 +97,15 @@ def attach_file(context: Any, path: str | Path, name: str | None = None) -> None
         path: Path to the file to attach.
         name: Optional display name. If omitted, the file name is used.
     """
-    formatter = _find_formatter(context)
-    if formatter is None:
+    formatters = _find_formatters(context)
+    if not formatters:
         return
     p = Path(path)
     raw = p.read_bytes()
     data = base64.b64encode(raw).decode("ascii")
     mime = guess_mime(p.name)
-    formatter.add_attachment(
+    _broadcast_attachment(
+        formatters,
         name=name or p.name,
         mime_type=mime,
         content=data,
@@ -77,14 +122,17 @@ def attach_text(context: Any, text: str, name: str = "note.txt") -> None:
         text: Raw text to embed.
         name: Display name for the attachment. Defaults to ``note.txt``.
     """
-    formatter = _find_formatter(context)
-    if formatter is None:
+    formatters = _find_formatters(context)
+    if not formatters:
         return
-    formatter.add_attachment(
+    content = str(text)
+    _broadcast_attachment(
+        formatters,
         name=name,
         mime_type="text/plain",
-        content=str(text),
+        content=content,
         encoding="raw",
+        size=len(content),
     )
 
 
@@ -96,15 +144,31 @@ def attach_json(context: Any, data: Any, name: str = "data.json") -> None:
         data: Any object that can be passed to ``json.dumps``.
         name: Display name for the attachment. Defaults to ``data.json``.
     """
-    formatter = _find_formatter(context)
-    if formatter is None:
+    formatters = _find_formatters(context)
+    if not formatters:
         return
-    formatter.add_attachment(
+    content = json.dumps(data, indent=2, default=str)
+    _broadcast_attachment(
+        formatters,
         name=name,
         mime_type="application/json",
-        content=json.dumps(data, indent=2, default=str),
+        content=content,
         encoding="raw",
+        size=len(content),
     )
+
+
+def _sniff_image_mime(data: bytes) -> str | None:
+    """Detect the image format from magic bytes."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if data[:2] == b"\xff\xd8":
+        return "image/jpeg"
+    if data[:4] == b"GIF8":
+        return "image/gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
 
 
 def attach_screenshot(context: Any, source: Any, name: str = "screenshot.png") -> None:
@@ -123,8 +187,8 @@ def attach_screenshot(context: Any, source: Any, name: str = "screenshot.png") -
         source: Screenshot source (see above).
         name: Display name for the attachment. Defaults to ``screenshot.png``.
     """
-    formatter = _find_formatter(context)
-    if formatter is None:
+    formatters = _find_formatters(context)
+    if not formatters:
         return
 
     data: bytes | None = None
@@ -150,21 +214,29 @@ def attach_screenshot(context: Any, source: Any, name: str = "screenshot.png") -
 
     if data is None:
         return
+    if not isinstance(data, (bytes, bytearray)):
+        # A driver/framework returned something unexpected; keep it attachable
+        # instead of crashing inside base64.b64encode.
+        data = str(data).encode("utf-8", "replace")
 
-    name_lower = name.lower()
-    if name_lower.endswith((".jpg", ".jpeg")):
-        mime = "image/jpeg"
-    elif name_lower.endswith(".webp"):
-        mime = "image/webp"
-    elif name_lower.endswith(".gif"):
-        mime = "image/gif"
-    else:
-        mime = mimetypes.guess_type(name)[0] or "image/png"
+    mime = _sniff_image_mime(bytes(data))
+    if mime is None:
+        name_lower = name.lower()
+        if name_lower.endswith((".jpg", ".jpeg")):
+            mime = "image/jpeg"
+        elif name_lower.endswith(".webp"):
+            mime = "image/webp"
+        elif name_lower.endswith(".gif"):
+            mime = "image/gif"
+        else:
+            mime = mimetypes.guess_type(name)[0] or "image/png"
 
-    formatter.add_attachment(
+    encoded = base64.b64encode(bytes(data)).decode("ascii")
+    _broadcast_attachment(
+        formatters,
         name=name,
         mime_type=mime,
-        content=base64.b64encode(data).decode("ascii"),
+        content=encoded,
         encoding="base64",
         size=len(data),
     )
@@ -178,10 +250,11 @@ def log(context: Any, message: str, level: str = "INFO") -> None:
         message: Free-form text line to attach.
         level: Log level. Defaults to ``INFO``.
     """
-    formatter = _find_formatter(context)
-    if formatter is None:
+    formatters = _find_formatters(context)
+    if not formatters:
         return
-    formatter.add_log(level=level, message=str(message))
+    text = str(message)
+    _broadcast_log(formatters, level=level, message=text)
 
 
 __all__ = [

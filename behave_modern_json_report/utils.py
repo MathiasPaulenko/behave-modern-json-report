@@ -58,15 +58,30 @@ _FAILED_STATUSES: frozenset[str] = frozenset(
 )
 
 
+# Behave 1.3.x runtime statuses that are not part of the canonical model
+# vocabulary. ``pending_warn`` marks a pending step that ran (wip mode);
+# ``untested_*``, ``executing`` and ``unknown`` are pre-execution states.
+_BEHAVE_STATUS_MAP: dict[str, str] = {
+    "pending_warn": STATUS_PENDING,
+    "untested_pending": STATUS_UNTESTED,
+    "untested_undefined": STATUS_UNTESTED,
+    "executing": STATUS_UNTESTED,
+    "unknown": STATUS_UNTESTED,
+}
+
+
 def normalize_status(value: Any) -> str:
     """Normalize a Behave status (enum or string) to a canonical lowercase string."""
     if value is None:
         return STATUS_UNTESTED
-    name = getattr(value, "name", None) or str(value)
-    name = name.lower().strip()
+    try:
+        raw_name = getattr(value, "name", None)
+    except Exception:
+        raw_name = None
+    name = safe_str(raw_name if raw_name is not None else value).lower().strip()
     if name in ALL_STATUSES:
         return name
-    return STATUS_UNTESTED
+    return _BEHAVE_STATUS_MAP.get(name, STATUS_UNTESTED)
 
 
 # ---------------------------------------------------------------------------

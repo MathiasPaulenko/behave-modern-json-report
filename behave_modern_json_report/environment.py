@@ -10,6 +10,7 @@ from __future__ import annotations
 import getpass
 import os
 import platform as _platform
+import re
 import shlex
 import subprocess
 import sys
@@ -34,6 +35,18 @@ def _behave_version() -> str | None:
     except Exception:
         return None
     return safe_str(getattr(behave, "__version__", None)) or None
+
+
+_CREDENTIALS_RE = re.compile(r"(://)[^/\s@]*@")
+
+
+def _sanitize_remote(url: str) -> str:
+    """Strip embedded credentials (``scheme://user:pass@host``) from a remote URL.
+
+    Remotes often carry tokens (``https://oauth2:TOKEN@gitlab.com/...``) that
+    must never end up in a report artifact.
+    """
+    return _CREDENTIALS_RE.sub(r"\1", url)
 
 
 def _capture_git_info() -> dict[str, str]:
@@ -66,7 +79,9 @@ def _capture_git_info() -> dict[str, str]:
             check=False,
         )
         if result.returncode == 0:
-            info["remote"] = result.stdout.strip()
+            remote = result.stdout.strip()
+            if remote:
+                info["remote"] = _sanitize_remote(remote)
     except Exception:  # pragma: no cover - defensive
         pass
     return info
@@ -114,6 +129,12 @@ def detect_environment(
 
     git_info = _capture_git_info()
 
+    try:
+        cwd = os.getcwd()
+    except OSError:
+        # The process cwd may have been deleted underneath us.
+        cwd = None
+
     return Environment(
         python_version=python_version(),
         behave_version=behave_version if behave_version is not None else _behave_version(),
@@ -122,7 +143,7 @@ def detect_environment(
         os_version=os_version(),
         hostname=hostname(),
         ci_provider=ci_provider(),
-        cwd=safe_str(os.getcwd()) or None,
+        cwd=safe_str(cwd) or None,
         command=shlex.join(sys.argv) or None,
         user=user,
         cpu_count=cpu_count or None,

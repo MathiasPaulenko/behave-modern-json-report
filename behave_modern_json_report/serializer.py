@@ -9,6 +9,7 @@ Configuration is handled through :class:`SerializerOptions`.
 from __future__ import annotations
 
 import json
+import math
 from typing import Any
 
 from .models import (
@@ -106,6 +107,15 @@ class SerializerOptions:
 # Field-name mapping (model snake_case -> JSON camelCase, as defined by the
 # canonical schema in schemas/execution.schema.json).
 # ---------------------------------------------------------------------------
+
+
+def _duration(value: Any) -> float:
+    """Coerce a duration to a finite, non-negative float (schema: minimum 0)."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return v if math.isfinite(v) and v >= 0 else 0.0
 
 
 def _location_to_dict(loc: Location | None) -> dict[str, Any] | None:
@@ -212,7 +222,7 @@ def _step_to_dict(step: Step, *, options: SerializerOptions) -> dict[str, Any]:
         "keyword": step.keyword,
         "text": step.text,
         "status": step.status,
-        "duration": step.duration,
+        "duration": _duration(step.duration),
     }
     if step.location is not None:
         d["location"] = _location_to_dict(step.location)
@@ -237,7 +247,7 @@ def _scenario_to_dict(scenario: Scenario, *, options: SerializerOptions) -> dict
         "name": scenario.name,
         "featureId": scenario.feature_id,
         "status": scenario.status,
-        "duration": scenario.duration,
+        "duration": _duration(scenario.duration),
     }
     if scenario.description is not None:
         d["description"] = scenario.description
@@ -261,7 +271,7 @@ def _scenario_to_dict(scenario: Scenario, *, options: SerializerOptions) -> dict
         d["background"] = _background_to_dict(scenario.background, options=options)
     if scenario.retry is not None:
         d["retry"] = dict(scenario.retry)
-    d["steps"] = [_step_to_dict(s, options=options) for s in scenario.steps]
+    d["steps"] = [_step_to_dict(s, options=options) for s in scenario.steps or []]
     return d
 
 
@@ -271,7 +281,7 @@ def _rule_to_dict(rule: Rule, *, options: SerializerOptions) -> dict[str, Any]:
         "name": rule.name,
         "featureId": rule.feature_id,
         "status": rule.status,
-        "duration": rule.duration,
+        "duration": _duration(rule.duration),
     }
     if rule.description is not None:
         d["description"] = rule.description
@@ -282,7 +292,7 @@ def _rule_to_dict(rule: Rule, *, options: SerializerOptions) -> dict[str, Any]:
     if rule.background is not None:
         d["background"] = _background_to_dict(rule.background, options=options)
     rule_scenarios: list[dict[str, Any]] = []
-    for s in rule.scenarios:
+    for s in rule.scenarios or []:
         if options.exclude_passed_scenarios and s.status == STATUS_PASSED:
             continue
         rule_scenarios.append(_scenario_to_dict(s, options=options))
@@ -292,20 +302,24 @@ def _rule_to_dict(rule: Rule, *, options: SerializerOptions) -> dict[str, Any]:
 
 def _feature_to_dict(feature: Feature, *, options: SerializerOptions) -> dict[str, Any]:
     scenarios: list[dict[str, Any]] = []
-    for sc in feature.scenarios:
+    for sc in feature.scenarios or []:
         if options.exclude_passed_scenarios and sc.status == STATUS_PASSED:
             continue
         scenarios.append(_scenario_to_dict(sc, options=options))
 
     rules: list[dict[str, Any]] = []
-    for rule in feature.rules:
-        rules.append(_rule_to_dict(rule, options=options))
+    for rule in feature.rules or []:
+        rd = _rule_to_dict(rule, options=options)
+        # A rule with no surviving scenarios is noise in a failure-only report.
+        if options.exclude_passed_scenarios and not rd["scenarios"]:
+            continue
+        rules.append(rd)
 
     d: dict[str, Any] = {
         "id": feature.id,
         "name": feature.name,
         "status": feature.status,
-        "duration": feature.duration,
+        "duration": _duration(feature.duration),
         "scenarios": scenarios,
     }
     if feature.description is not None:
@@ -327,7 +341,7 @@ def _execution_to_dict(execution: Execution) -> dict[str, Any]:
     d: dict[str, Any] = {
         "executionId": execution.execution_id,
         "status": execution.status,
-        "duration": execution.duration,
+        "duration": _duration(execution.duration),
     }
     if execution.project_name is not None:
         d["projectName"] = execution.project_name
@@ -352,13 +366,13 @@ def _statistics_to_dict(stats: Statistics) -> dict[str, Any]:
         "skipped": stats.skipped,
         "undefined": stats.undefined,
         "pending": stats.pending,
-        "passRate": stats.pass_rate,
-        "duration": stats.duration,
+        "passRate": min(1.0, _duration(stats.pass_rate)),
+        "duration": _duration(stats.duration),
         "errorCount": stats.error_count,
         "totalAttachments": stats.total_attachments,
         "totalLogs": stats.total_logs,
-        "slowestStepDuration": stats.slowest_step_duration,
-        "avgScenarioDuration": stats.avg_scenario_duration,
+        "slowestStepDuration": _duration(stats.slowest_step_duration),
+        "avgScenarioDuration": _duration(stats.avg_scenario_duration),
     }
     if stats.common_exception_type is not None:
         d["commonExceptionType"] = stats.common_exception_type
@@ -408,6 +422,29 @@ def _metadata_to_dict(meta: Metadata) -> dict[str, Any]:
     return dict(meta.data) if meta.data else {}
 
 
+def _sanitize_for_json(obj: Any, _stack: frozenset[int] = frozenset()) -> Any:
+    """Replace non-finite floats so :func:`json.dumps` emits valid JSON.
+
+    ``json.dumps`` happily writes ``NaN``/``Infinity`` literals, which are
+    invalid per the JSON spec and rejected by strict parsers.  Cyclic
+    containers (reachable through ``metadata``) degrade to their ``repr``
+    instead of recursing forever.
+    """
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else 0.0
+    if isinstance(obj, dict):
+        if id(obj) in _stack:
+            return str(obj)
+        stack = _stack | {id(obj)}
+        return {key: _sanitize_for_json(value, stack) for key, value in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        if id(obj) in _stack:
+            return str(obj)
+        stack = _stack | {id(obj)}
+        return [_sanitize_for_json(value, stack) for value in obj]
+    return obj
+
+
 class Serializer:
     """Serialize :class:`ExecutionReport` instances to JSON."""
 
@@ -416,10 +453,25 @@ class Serializer:
 
     def to_dict(self, report: ExecutionReport) -> dict[str, Any]:
         """Convert ``report`` into a JSON-ready dictionary."""
+        if not isinstance(report, ExecutionReport):
+            raise TypeError(f"report must be an ExecutionReport, not {type(report).__name__}")
+        # The schema requires these objects — a missing or wrongly-typed one
+        # can only produce an invalid report, so fail loudly.
+        for field_name, field_type in (
+            ("execution", Execution),
+            ("statistics", Statistics),
+            ("metadata", Metadata),
+        ):
+            if not isinstance(getattr(report, field_name, None), field_type):
+                raise TypeError(f"report.{field_name} must be a {field_type.__name__}")
         opts = self.options
+        if opts.include_environment and not isinstance(report.environment, Environment):
+            raise TypeError("report.environment must be an Environment")
+        if report.features is not None and not isinstance(report.features, list):
+            raise TypeError("report.features must be a list")
 
         features: list[dict[str, Any]] = []
-        for feature in report.features:
+        for feature in report.features or []:
             fd = _feature_to_dict(feature, options=opts)
             # The collector adds rule scenarios to feature.scenarios too,
             # so fd["scenarios"] contains all non-passed scenarios (top-level
@@ -441,7 +493,11 @@ class Serializer:
 
     def to_json(self, report: ExecutionReport) -> str:
         """Serialize ``report`` to a JSON string."""
-        return json.dumps(self.to_dict(report), **self.options.to_json_kwargs())
+        return json.dumps(
+            _sanitize_for_json(self.to_dict(report)),
+            default=str,
+            **self.options.to_json_kwargs(),
+        )
 
 
 def serialize(

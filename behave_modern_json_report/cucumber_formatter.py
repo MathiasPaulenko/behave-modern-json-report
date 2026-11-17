@@ -14,7 +14,9 @@ Usage::
 
 from __future__ import annotations
 
+import base64
 import contextlib
+import mimetypes
 import os
 import sys
 from typing import Any
@@ -26,8 +28,9 @@ from .cucumber_serializer import (
 )
 from .formatter import (
     _BaseFormatter,
+    _config_bool,
+    _config_option,
     _metadata_from_config,
-    _parse_bool,
     _project_name_from_config,
     _userdata_from_config,
 )
@@ -38,44 +41,19 @@ def _cucumber_options_from_config(
     config: Any,
 ) -> CucumberSerializerOptions:
     """Build :class:`CucumberSerializerOptions` from a Behave config object."""
-    pretty = True
     indent = 2
-    sort_keys = False
-    ensure_ascii = False
-    embed_attachments = True
-    include_output = True
-    include_background = True
-    duration_in_nanos = True
-
-    if config is not None:
-        get = getattr(config, "get", None)
-        if callable(get):
-            with contextlib.suppress(Exception):
-                pretty = _parse_bool(get("pretty", "true"))
-            with contextlib.suppress(Exception):
-                indent = int(get("indent", "2"))
-            with contextlib.suppress(Exception):
-                sort_keys = _parse_bool(get("sort_keys", "false"))
-            with contextlib.suppress(Exception):
-                ensure_ascii = _parse_bool(get("ensure_ascii", "false"))
-            with contextlib.suppress(Exception):
-                embed_attachments = _parse_bool(get("embed_attachments", "true"))
-            with contextlib.suppress(Exception):
-                include_output = _parse_bool(get("include_output", "true"))
-            with contextlib.suppress(Exception):
-                include_background = _parse_bool(get("include_background", "true"))
-            with contextlib.suppress(Exception):
-                duration_in_nanos = _parse_bool(get("duration_in_nanos", "true"))
+    with contextlib.suppress(Exception):
+        indent = max(0, int(safe_str(_config_option(config, "indent"), "2") or "2"))
 
     return CucumberSerializerOptions(
-        pretty=pretty,
+        pretty=_config_bool(config, "pretty", True),
         indent=indent,
-        sort_keys=sort_keys,
-        ensure_ascii=ensure_ascii,
-        embed_attachments=embed_attachments,
-        include_output=include_output,
-        include_background=include_background,
-        duration_in_nanos=duration_in_nanos,
+        sort_keys=_config_bool(config, "sort_keys", False),
+        ensure_ascii=_config_bool(config, "ensure_ascii", False),
+        embed_attachments=_config_bool(config, "embed_attachments", True),
+        include_output=_config_bool(config, "include_output", True),
+        include_background=_config_bool(config, "include_background", True),
+        duration_in_nanos=_config_bool(config, "duration_in_nanos", True),
     )
 
 
@@ -101,8 +79,10 @@ class CucumberJSONFormatter(_BaseFormatter):  # type: ignore[misc]
     ) -> None:
         if _BaseFormatter is not object and stream_opener is not None:
             super().__init__(stream_opener, config)
-        elif _BaseFormatter is not object:
-            pass
+        else:
+            # Bypass base __init__ (programmatic use, or behave missing);
+            # keep the attribute so the flush path behaves consistently.
+            self.stream_opener = stream_opener
         self._stream = stream or sys.stdout
         self._config = config
         self._options = options or _cucumber_options_from_config(config)
@@ -119,15 +99,29 @@ class CucumberJSONFormatter(_BaseFormatter):  # type: ignore[misc]
         )
         self._serializer = CucumberSerializer(self._options)
         self._closed = False
+        self._rewrite = False
 
     # ------------------------------------------------------------------
     # Behave lifecycle hooks
     # ------------------------------------------------------------------
 
+    def _reopen_if_closed(self) -> None:
+        """Resume accepting events after an ``eof()`` flush.
+
+        ``eof()`` writes the report in programmatic use, but Behave calls it
+        once per feature file — producers may keep sending events afterwards.
+        Reopening marks the already-written payload stale so the next flush
+        rewrites the stream instead of silently dropping the new data.
+        """
+        if self._closed:
+            self._closed = False
+            self._rewrite = True
+
     def uri(self, uri: str) -> None:
         pass
 
     def feature(self, feature: Any) -> None:
+        self._reopen_if_closed()
         if self._collector._current_scenario is not None:
             self._collector.end_scenario(None)
         if self._collector._current_feature is not None:
@@ -138,20 +132,24 @@ class CucumberJSONFormatter(_BaseFormatter):  # type: ignore[misc]
         pass
 
     def rule(self, rule: Any) -> None:
+        self._reopen_if_closed()
         self._collector.start_rule(rule)
 
     def rule_finished(self) -> None:
         self._collector.end_rule()
 
     def scenario(self, scenario: Any) -> None:
+        self._reopen_if_closed()
         if self._collector._current_scenario is not None:
             self._collector.end_scenario(None)
         self._collector.start_scenario(scenario)
 
     def step(self, step: Any) -> None:
+        self._reopen_if_closed()
         self._collector.start_step(step)
 
     def result(self, step: Any) -> None:
+        self._reopen_if_closed()
         self._collector.end_step(step)
 
     # Backward-compatible aliases for programmatic use
@@ -197,6 +195,7 @@ class CucumberJSONFormatter(_BaseFormatter):  # type: ignore[misc]
                 stream.flush()
             if hasattr(stream_opener, "close"):
                 stream_opener.close()
+            self._rewrite = False
             return
 
         stream = self._stream or sys.stdout
@@ -204,6 +203,14 @@ class CucumberJSONFormatter(_BaseFormatter):  # type: ignore[misc]
             return
         write = getattr(stream, "write", None)
         if callable(write):
+            if self._rewrite:
+                # The stream already holds a complete report; rewrite it in
+                # place when the stream supports it so the output stays a
+                # single JSON document.
+                with contextlib.suppress(Exception):
+                    stream.seek(0)
+                    stream.truncate(0)
+                self._rewrite = False
             write(payload)
             write("\n")
             flush = getattr(stream, "flush", None)
@@ -229,6 +236,7 @@ class CucumberJSONFormatter(_BaseFormatter):  # type: ignore[misc]
         encoding: str = "raw",
         size: int | None = None,
     ) -> None:
+        self._reopen_if_closed()
         self._collector.add_attachment(
             name=name,
             mime_type=mime_type,
@@ -240,4 +248,28 @@ class CucumberJSONFormatter(_BaseFormatter):  # type: ignore[misc]
         )
 
     def add_log(self, level: str, message: str) -> None:
+        self._reopen_if_closed()
         self._collector.add_log(level=level, message=safe_str(message))
+
+    def embedding(self, mime_type: str, data: Any) -> None:
+        """Handle ``context.attach(mime_type, data)`` from Behave hooks.
+
+        Behave routes attachments to formatters that expose an ``embedding``
+        method; without it the data is silently dropped.
+        """
+        self._reopen_if_closed()
+        if isinstance(data, (bytes, bytearray, memoryview)):
+            raw = bytes(data)
+        elif data is None:
+            raw = b""
+        else:
+            raw = safe_str(data).encode("utf-8", "replace")
+        mime = safe_str(mime_type) or "application/octet-stream"
+        extension = mimetypes.guess_extension(mime) or ""
+        self._collector.add_attachment(
+            name=f"attachment{extension}",
+            mime_type=mime,
+            content=base64.b64encode(raw).decode("ascii"),
+            encoding="base64",
+            size=len(raw),
+        )

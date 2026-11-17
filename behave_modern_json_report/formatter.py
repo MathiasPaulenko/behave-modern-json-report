@@ -11,8 +11,10 @@ The formatter is a thin adapter: it delegates event collection to
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import json
+import mimetypes
 import os
 import sys
 from typing import Any
@@ -31,46 +33,71 @@ def _parse_bool(value: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+# ``mjr.``-prefixed userdata keys consumed as formatter options.
+_OPTION_KEYS = (
+    "pretty",
+    "include_environment",
+    "include_attachments",
+    "embed_attachments",
+    "exclude_passed_scenarios",
+    "indent",
+    "sort_keys",
+    "ensure_ascii",
+    "include_output",
+    "include_background",
+    "duration_in_nanos",
+)
+
+
+def _config_option(config: Any, key: str) -> Any:
+    """Read a formatter option from ``config``.
+
+    Behave only exposes user configuration to custom formatters through
+    ``config.userdata``, so ``mjr.<key>`` is read there first — this is the
+    channel documented for production use::
+
+        [behave.userdata]
+        mjr.pretty = false
+
+    A ``config.get(key)`` callable is tried afterwards for non-Behave
+    producers.
+    """
+    if config is None:
+        return None
+    userdata = getattr(config, "userdata", None)
+    if isinstance(userdata, dict):
+        value = userdata.get(f"mjr.{key}")
+        if value is not None:
+            return value
+    get = getattr(config, "get", None)
+    if callable(get):
+        with contextlib.suppress(Exception):
+            return get(key)
+    return None
+
+
+def _config_bool(config: Any, key: str, default: bool) -> bool:
+    raw = _config_option(config, key)
+    if raw is None:
+        return default
+    return _parse_bool(safe_str(raw))
+
+
 def _options_from_config(config: Any) -> SerializerOptions:
     """Build :class:`SerializerOptions` from a Behave formatter config object."""
-    pretty = True
-    include_environment = True
-    include_attachments = True
-    embed_attachments = True
-    exclude_passed_scenarios = False
     indent = 2
-    sort_keys = False
-    ensure_ascii = False
-
-    if config is not None:
-        get = getattr(config, "get", None)
-        if callable(get):
-            with contextlib.suppress(Exception):
-                pretty = _parse_bool(get("pretty", "true"))
-            with contextlib.suppress(Exception):
-                include_environment = _parse_bool(get("include_environment", "true"))
-            with contextlib.suppress(Exception):
-                include_attachments = _parse_bool(get("include_attachments", "true"))
-            with contextlib.suppress(Exception):
-                embed_attachments = _parse_bool(get("embed_attachments", "true"))
-            with contextlib.suppress(Exception):
-                exclude_passed_scenarios = _parse_bool(get("exclude_passed_scenarios", "false"))
-            with contextlib.suppress(Exception):
-                indent = int(get("indent", "2"))
-            with contextlib.suppress(Exception):
-                sort_keys = _parse_bool(get("sort_keys", "false"))
-            with contextlib.suppress(Exception):
-                ensure_ascii = _parse_bool(get("ensure_ascii", "false"))
+    with contextlib.suppress(Exception):
+        indent = max(0, int(safe_str(_config_option(config, "indent"), "2") or "2"))
 
     return SerializerOptions(
-        pretty=pretty,
-        include_environment=include_environment,
-        include_attachments=include_attachments,
-        embed_attachments=embed_attachments,
-        exclude_passed_scenarios=exclude_passed_scenarios,
+        pretty=_config_bool(config, "pretty", True),
+        include_environment=_config_bool(config, "include_environment", True),
+        include_attachments=_config_bool(config, "include_attachments", True),
+        embed_attachments=_config_bool(config, "embed_attachments", True),
+        exclude_passed_scenarios=_config_bool(config, "exclude_passed_scenarios", False),
         indent=indent,
-        sort_keys=sort_keys,
-        ensure_ascii=ensure_ascii,
+        sort_keys=_config_bool(config, "sort_keys", False),
+        ensure_ascii=_config_bool(config, "ensure_ascii", False),
     )
 
 
@@ -95,32 +122,32 @@ def _project_name_from_config(config: Any) -> str | None:
 
 
 def _metadata_from_config(config: Any) -> dict[str, Any]:
-    """Read ``metadata`` from a Behave formatter config object.
+    """Read extra metadata from the formatter config.
 
-    The value must be a JSON object string, e.g.::
+    Accepts a JSON object string or a dict, via ``mjr.metadata`` in userdata
+    or ``config.get("metadata")`` for non-Behave producers::
 
-        metadata = {"branch": "dev", "team": "qa"}
+        [behave.userdata]
+        mjr.metadata = {"browser": "firefox", "suite": "nightly"}
     """
     if config is None:
         return {}
-    get = getattr(config, "get", None)
-    if not callable(get):
-        return {}
-    with contextlib.suppress(Exception):
-        raw = get("metadata", "")
-        if raw and raw.strip():
+    raw = _config_option(config, "metadata")
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str) and raw.strip():
+        with contextlib.suppress(Exception):
             data = json.loads(raw)
             if isinstance(data, dict):
                 return data
     return {}
 
 
-# Keys that behave itself puts in userdata; we don't want them in report metadata.
-_USERDATA_RESERVED = frozenset(
-    {
-        "mjr.project_name",
-    }
-)
+# ``mjr.``-prefixed userdata keys consumed by the library itself; they must
+# not leak into report metadata.
+_USERDATA_RESERVED = frozenset({"mjr.project_name", "mjr.metadata"}) | {
+    f"mjr.{key}" for key in _OPTION_KEYS
+}
 
 
 def _userdata_from_config(config: Any) -> dict[str, Any]:
@@ -175,9 +202,10 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
     ) -> None:
         if _BaseFormatter is not object and stream_opener is not None:
             super().__init__(stream_opener, config)
-        elif _BaseFormatter is not object:
-            # Bypass base __init__ that requires a stream_opener
-            pass
+        else:
+            # Bypass base __init__ (programmatic use, or behave missing);
+            # keep the attribute so the flush path behaves consistently.
+            self.stream_opener = stream_opener
         self._stream = stream or sys.stdout
         self._config = config
         self._options = options or _options_from_config(config)
@@ -194,10 +222,23 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
         )
         self._serializer = Serializer(self._options)
         self._closed = False
+        self._rewrite = False
 
     # ------------------------------------------------------------------
     # Behave lifecycle hooks
     # ------------------------------------------------------------------
+
+    def _reopen_if_closed(self) -> None:
+        """Resume accepting events after an ``eof()`` flush.
+
+        ``eof()`` writes the report in programmatic use, but Behave calls it
+        once per feature file — producers may keep sending events afterwards.
+        Reopening marks the already-written payload stale so the next flush
+        rewrites the stream instead of silently dropping the new data.
+        """
+        if self._closed:
+            self._closed = False
+            self._rewrite = True
 
     def uri(self, uri: str) -> None:
         pass
@@ -206,6 +247,7 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
         # Finalize previous scenario and feature if any.  The collector keeps
         # a reference to the previous Behave objects, so pass ``None`` here:
         # ``feature`` is the *new* feature, not the one that just ended.
+        self._reopen_if_closed()
         if self._collector._current_scenario is not None:
             self._collector.end_scenario(None)
         if self._collector._current_feature is not None:
@@ -216,6 +258,7 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
         pass
 
     def rule(self, rule: Any) -> None:
+        self._reopen_if_closed()
         self._collector.start_rule(rule)
 
     def rule_finished(self) -> None:
@@ -223,14 +266,17 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
 
     def scenario(self, scenario: Any) -> None:
         # Finalize previous scenario if any
+        self._reopen_if_closed()
         if self._collector._current_scenario is not None:
             self._collector.end_scenario(None)
         self._collector.start_scenario(scenario)
 
     def step(self, step: Any) -> None:
+        self._reopen_if_closed()
         self._collector.start_step(step)
 
     def result(self, step: Any) -> None:
+        self._reopen_if_closed()
         self._collector.end_step(step)
 
     # Backward-compatible aliases for programmatic use
@@ -282,6 +328,7 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
                 stream.flush()
             if hasattr(stream_opener, "close"):
                 stream_opener.close()
+            self._rewrite = False
             return
 
         # Fallback: write to self._stream or stdout
@@ -290,6 +337,14 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
             return
         write = getattr(stream, "write", None)
         if callable(write):
+            if self._rewrite:
+                # The stream already holds a complete report; rewrite it in
+                # place when the stream supports it so the output stays a
+                # single JSON document.
+                with contextlib.suppress(Exception):
+                    stream.seek(0)
+                    stream.truncate(0)
+                self._rewrite = False
             write(payload)
             write("\n")
             flush = getattr(stream, "flush", None)
@@ -315,6 +370,7 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
         encoding: str = "raw",
         size: int | None = None,
     ) -> None:
+        self._reopen_if_closed()
         self._collector.add_attachment(
             name=name,
             mime_type=mime_type,
@@ -326,7 +382,31 @@ class ModernJSONFormatter(_BaseFormatter):  # type: ignore[misc]
         )
 
     def add_log(self, level: str, message: str) -> None:
+        self._reopen_if_closed()
         self._collector.add_log(level=level, message=safe_str(message))
+
+    def embedding(self, mime_type: str, data: Any) -> None:
+        """Handle ``context.attach(mime_type, data)`` from Behave hooks.
+
+        Behave routes attachments to formatters that expose an ``embedding``
+        method; without it the data is silently dropped.
+        """
+        self._reopen_if_closed()
+        if isinstance(data, (bytes, bytearray, memoryview)):
+            raw = bytes(data)
+        elif data is None:
+            raw = b""
+        else:
+            raw = safe_str(data).encode("utf-8", "replace")
+        mime = safe_str(mime_type) or "application/octet-stream"
+        extension = mimetypes.guess_extension(mime) or ""
+        self._collector.add_attachment(
+            name=f"attachment{extension}",
+            mime_type=mime,
+            content=base64.b64encode(raw).decode("ascii"),
+            encoding="base64",
+            size=len(raw),
+        )
 
 
 __all__ = ["_BaseFormatter", "ModernJSONFormatter"]

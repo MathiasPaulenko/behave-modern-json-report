@@ -8,6 +8,9 @@ into the model.
 
 from __future__ import annotations
 
+import contextlib
+import json
+import math
 import os
 import time
 import traceback as _tb
@@ -33,7 +36,13 @@ from .models import (
     StepLog,
 )
 from .schema import SCHEMA_VERSION
-from .statistics import compute_statistics, feature_status, rule_status, scenario_status
+from .statistics import (
+    _iter_feature_scenarios,
+    compute_statistics,
+    feature_status,
+    rule_status,
+    scenario_status,
+)
 from .utils import (
     _FAILED_STATUSES,
     STATUS_FAILED,
@@ -70,6 +79,25 @@ def _all_steps(behave_scenario: Any) -> list[Any]:
     return list(all_steps)
 
 
+def _finite_float(value: Any) -> float | None:
+    """Convert ``value`` to a finite float, or ``None`` if not possible."""
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _safe_line(value: Any) -> int | None:
+    """Coerce a line number to ``int``, tolerating non-numeric values."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _location(obj: Any) -> Location | None:
     filename = getattr(obj, "filename", None)
     line = getattr(obj, "line", None)
@@ -80,7 +108,11 @@ def _location(obj: Any) -> Location | None:
             line = getattr(location, "line", None)
     if filename is None and line is None:
         return None
-    return Location(filename=safe_str(filename), line=int(line or 0))
+    try:
+        line_no = int(line) if line is not None else 0
+    except (TypeError, ValueError):
+        line_no = 0
+    return Location(filename=safe_str(filename), line=line_no)
 
 
 def _doc_string(raw: Any) -> DocString | None:
@@ -172,7 +204,12 @@ class Collector:
         self._start_time = now_iso()
         self._start_monotonic = time.monotonic()
         self._command: str | None = None
-        self._working_directory: str | None = os.getcwd()
+        self._working_directory: str | None
+        try:
+            self._working_directory = os.getcwd()
+        except OSError:
+            # The process cwd may have been deleted underneath us.
+            self._working_directory = None
 
         self._features: list[Feature] = []
         self._current_feature: Feature | None = None
@@ -193,8 +230,12 @@ class Collector:
         self._behave_rule: Any = None
         self._step_lookup: dict[int, Step] = {}
         self._resolved_step_ids: set[int] = set()
+        # Last step of the current scenario that received its ``result()``.
+        # Hooks like ``after_step`` run after the result event, so pending
+        # items present when the *next* ``step()`` event arrives belong to it.
+        self._last_resolved_step: Step | None = None
         # Attachments/logs added outside a ``result()`` window (hooks, fixtures)
-        # are buffered and flushed to the next step that resolves.
+        # are buffered and flushed to the step they belong to.
         self._pending: list[tuple[str, Any]] = []
 
     # ------------------------------------------------------------------
@@ -207,8 +248,8 @@ class Collector:
             name=safe_str(getattr(behave_feature, "name", "")) or "<unnamed>",
             description=self._join_description(getattr(behave_feature, "description", None)),
             tags=safe_tags(getattr(behave_feature, "tags", None)),
-            filename=getattr(behave_feature, "filename", None),
-            line=getattr(behave_feature, "line", None),
+            filename=safe_str(getattr(behave_feature, "filename", None)) or None,
+            line=_safe_line(getattr(behave_feature, "line", None)),
         )
         behave_background = getattr(behave_feature, "background", None)
         if behave_background:
@@ -231,9 +272,9 @@ class Collector:
             self.end_scenario(None)
         if self._feature_start is not None:
             feature.duration = monotonic_seconds(self._feature_start)
-        duration = getattr(behave_feature, "duration", None)
-        if duration:
-            feature.duration = float(duration)
+        duration = _finite_float(getattr(behave_feature, "duration", None))
+        if duration is not None:
+            feature.duration = duration
         feature.status = _behave_status(behave_feature) or feature_status(feature)
         self._current_feature = None
         self._behave_feature = None
@@ -261,7 +302,10 @@ class Collector:
             location=_location(behave_rule),
         )
         behave_background = getattr(behave_rule, "background", None)
-        if behave_background:
+        # Behave creates a default empty Background for rules without a declared
+        # one; only emit a background block when the rule actually declares
+        # steps of its own.
+        if behave_background is not None and (getattr(behave_background, "steps", None) or []):
             rule.background = self._make_background(behave_background)
         feature.rules.append(rule)
         self._current_rule = rule
@@ -279,9 +323,9 @@ class Collector:
             self.end_scenario(None)
         if self._rule_start is not None:
             rule.duration = monotonic_seconds(self._rule_start)
-        duration = getattr(self._behave_rule, "duration", None)
-        if duration:
-            rule.duration = float(duration)
+        duration = _finite_float(getattr(self._behave_rule, "duration", None))
+        if duration is not None:
+            rule.duration = duration
         rule.status = _behave_status(self._behave_rule) or rule_status(rule)
         self._current_rule = None
         self._current_rule_name = None
@@ -331,8 +375,20 @@ class Collector:
             outline_name=outline_name,
             example_tags=self._extract_example_tags(behave_scenario, parent),
         )
-        # Assign background: rule background takes priority, then feature background
-        if rule is not None and rule.background:
+        # Assign the scenario's *effective* background. Behave merges feature
+        # and rule backgrounds via ``Background.inherited_steps``; building the
+        # per-scenario copy from ``behave_scenario.background`` keeps every
+        # background step that actually runs (``all_steps`` resolves the
+        # inheritance chain). Fallbacks keep non-Behave producers working.
+        behave_background = getattr(behave_scenario, "background", None)
+        if behave_background is not None:
+            effective_steps = getattr(behave_background, "all_steps", None)
+            if effective_steps is None:
+                effective_steps = getattr(behave_background, "steps", None)
+            effective_steps = list(effective_steps or [])
+            if effective_steps:
+                scenario.background = self._make_background(behave_background, effective_steps)
+        elif rule is not None and rule.background:
             scenario.background = rule.background
         elif feature.background:
             scenario.background = feature.background
@@ -357,15 +413,16 @@ class Collector:
             self._flush_pending(scenario.steps[-1])
         if self._scenario_start is not None:
             scenario.duration = monotonic_seconds(self._scenario_start)
-        duration = getattr(behave_scenario, "duration", None)
-        if duration:
-            scenario.duration = float(duration)
+        duration = _finite_float(getattr(behave_scenario, "duration", None))
+        if duration is not None:
+            scenario.duration = duration
         scenario.status = _behave_status(behave_scenario) or scenario_status(scenario)
         self._current_scenario = None
         self._behave_scenario = None
         self._scenario_start = None
         self._step_lookup.clear()
         self._resolved_step_ids.clear()
+        self._last_resolved_step = None
         return scenario
 
     # ------------------------------------------------------------------
@@ -376,6 +433,10 @@ class Collector:
         scenario = self._current_scenario
         if scenario is None:
             return None
+        # Behave's ``after_step`` hooks run after the ``result()`` event, so
+        # anything still pending when the next step arrives belongs to the
+        # step that just finished — not to the one about to start.
+        self._flush_pending(self._last_resolved_step)
         step = Step(
             id=generate_id("step"),
             keyword=safe_str(getattr(behave_step, "keyword", "")),
@@ -397,14 +458,15 @@ class Collector:
         step = self._step_lookup.get(id(behave_step)) or self._current_step
         if step is None:
             return None
-        behave_duration = getattr(behave_step, "duration", None)
-        if behave_duration:
-            step.duration = float(behave_duration)
+        behave_duration = _finite_float(getattr(behave_step, "duration", None))
+        if behave_duration is not None:
+            step.duration = behave_duration
         elif self._step_start is not None:
             step.duration = monotonic_seconds(self._step_start)
         step.status = _map_status(getattr(behave_step, "status", STATUS_PASSED))
         step.error = _error_from_step(behave_step)
         self._resolved_step_ids.add(id(step))
+        self._last_resolved_step = step
         self._flush_pending(step)
         if step is self._current_step:
             self._current_step = None
@@ -441,9 +503,9 @@ class Collector:
             model_step.status = _map_status(getattr(behave_step, "status", None))
             if model_step.error is None:
                 model_step.error = _error_from_step(behave_step)
-            duration = getattr(behave_step, "duration", None)
-            if duration and not model_step.duration:
-                model_step.duration = float(duration)
+            duration = _finite_float(getattr(behave_step, "duration", None))
+            if duration is not None and not model_step.duration:
+                model_step.duration = duration
 
     def _sync_background(self, scenario: Scenario, behave_scenario: Any) -> None:
         """Copy this run's background step results into the shared definition.
@@ -459,7 +521,10 @@ class Collector:
         behave_background = (
             getattr(behave_scenario, "background", None) if behave_scenario is not None else None
         )
-        behave_steps = list(getattr(behave_background, "steps", None) or [])
+        behave_steps = getattr(behave_background, "all_steps", None)
+        if behave_steps is None:
+            behave_steps = getattr(behave_background, "steps", None)
+        behave_steps = list(behave_steps or [])
         if len(behave_steps) != len(background.steps):
             return
         positional = all_steps is not None and len(all_steps) == len(scenario.steps)
@@ -517,6 +582,19 @@ class Collector:
         self._command = command
 
     def finalize(self) -> ExecutionReport:
+        # Items buffered by hooks that ran after the last resolvable step
+        # (e.g. ``after_all``) are attached to the final step of the run
+        # rather than silently dropped.
+        if self._pending:
+            last_step: Step | None = None
+            for feature in reversed(self._features):
+                for scenario in reversed(feature.scenarios):
+                    if scenario.steps:
+                        last_step = scenario.steps[-1]
+                        break
+                if last_step is not None:
+                    break
+            self._flush_pending(last_step)
         end_time = now_iso()
         duration = monotonic_seconds(self._start_monotonic)
         execution = Execution(
@@ -531,7 +609,7 @@ class Collector:
         )
         environment = detect_environment(
             behave_version=self._behave_version,
-            extra=self._metadata.get("environment_extra"),
+            extra=self._environment_extra(),
         )
         report = ExecutionReport(
             schema_version=SCHEMA_VERSION,
@@ -549,21 +627,24 @@ class Collector:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _make_background(behave_background: Any) -> Background:
+    def _make_background(behave_background: Any, steps: list[Any] | None = None) -> Background:
         bg = Background(
             id=generate_id("bg"),
             name=safe_str(getattr(behave_background, "name", "")) or "",
             keyword=safe_str(getattr(behave_background, "keyword", "Background")) or "Background",
             location=_location(behave_background),
         )
-        for behave_step in getattr(behave_background, "steps", []) or []:
+        source_steps = steps
+        if source_steps is None:
+            source_steps = list(getattr(behave_background, "steps", None) or [])
+        for behave_step in source_steps:
             step = Step(
                 id=generate_id("step"),
                 keyword=safe_str(getattr(behave_step, "keyword", "")),
                 text=safe_str(getattr(behave_step, "name", ""))
                 or safe_str(getattr(behave_step, "text", "")),
                 status=_map_status(getattr(behave_step, "status", STATUS_PASSED)),
-                duration=float(getattr(behave_step, "duration", 0.0) or 0.0),
+                duration=_finite_float(getattr(behave_step, "duration", None)) or 0.0,
                 location=_location(behave_step),
                 doc_string=_doc_string(getattr(behave_step, "doc_string", None)),
                 data_table=_data_table(getattr(behave_step, "table", None)),
@@ -589,8 +670,13 @@ class Collector:
     def _extract_examples(behave_scenario: Any, row: Any = None) -> list[dict[str, Any]]:
         # Behave-generated example rows expose ``_row`` (a table Row).
         if row is not None:
+            values: dict[Any, Any] = {}
             as_dict = getattr(row, "as_dict", None)
-            values = dict(as_dict()) if callable(as_dict) else {}
+            if callable(as_dict):
+                with contextlib.suppress(Exception):
+                    raw = as_dict()
+                    if isinstance(raw, dict):
+                        values = raw
             entry: dict[str, Any] = {"rowId": safe_str(getattr(row, "id", ""))}
             entry.update({safe_str(k): safe_str(v) for k, v in values.items()})
             return [entry]
@@ -628,11 +714,28 @@ class Collector:
             return sorted(diff) if diff else []
         return []
 
+    def _environment_extra(self) -> dict[str, Any] | None:
+        """Return the ``environment_extra`` metadata entry as a dict.
+
+        The value may arrive as a dict (programmatic) or a JSON object string
+        (userdata passes everything as text); anything else is ignored rather
+        than crashing ``merge_dicts`` inside ``detect_environment``.
+        """
+        raw = self._metadata.get("environment_extra")
+        if isinstance(raw, dict):
+            return raw
+        if isinstance(raw, str):
+            with contextlib.suppress(Exception):
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    return parsed
+        return None
+
     def _overall_status(self) -> str:
         for feature in self._features:
             if feature.status in _FAILED_STATUSES:
                 return STATUS_FAILED
-            for scenario in feature.scenarios:
+            for scenario in _iter_feature_scenarios(feature):
                 if scenario.status in _FAILED_STATUSES:
                     return STATUS_FAILED
         return STATUS_PASSED
