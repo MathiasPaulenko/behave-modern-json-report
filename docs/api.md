@@ -125,6 +125,10 @@ fmt = ModernJSONFormatter(
 )
 ```
 
+When driven by Behave, options are read from `mjr.*` userdata keys
+(`mjr.pretty`, `mjr.exclude_passed_scenarios`, `mjr.indent`, ...) — see the
+README's *Formatter options via `behave.ini`* section for the full list.
+
 ---
 
 ## `CucumberJSONFormatter`

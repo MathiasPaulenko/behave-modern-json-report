@@ -135,8 +135,29 @@ All keys prefixed with `mjr.` are automatically injected into the report's `meta
 You can also pass metadata via CLI:
 
 ```bash
-behave --userdata "mjr.branch=hotfix,mjr.build_id=99" --format behave_modern_json_report:ModernJSONFormatter --outfile report.json
+behave -D mjr.branch=hotfix -D mjr.build_id=99 --format behave_modern_json_report:ModernJSONFormatter --outfile report.json
 ```
+
+### Formatter options via `behave.ini`
+
+Formatter options are also read from `mjr.*` userdata keys (the only channel
+Behave exposes to custom formatters):
+
+```ini
+[behave.userdata]
+mjr.pretty = false                    ; compact JSON (default: true)
+mjr.indent = 4                        ; indent width when pretty (default: 2)
+mjr.include_environment = false       ; omit the environment block
+mjr.include_attachments = false       ; omit attachments and logs
+mjr.embed_attachments = false         ; reference files instead of inlining
+mjr.exclude_passed_scenarios = true   ; failure-only report
+mjr.sort_keys = true                  ; sort JSON object keys
+mjr.ensure_ascii = true               ; escape non-ASCII characters
+```
+
+The Cucumber formatter additionally accepts `mjr.include_output`,
+`mjr.include_background` and `mjr.duration_in_nanos`. Option keys are consumed
+by the formatter and never leak into the report's `metadata` block.
 
 ### Programmatically
 

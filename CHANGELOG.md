@@ -5,6 +5,68 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-11-18
+
+### Fixed
+
+- **Formatter options were dead code**: Behave's `Configuration` has no `.get`
+  method, so every documented option (`pretty`, `exclude_passed_scenarios`,
+  `indent`, ...) was silently ignored in real runs. Options are now read from
+  `mjr.*` userdata keys — the channel Behave actually exposes to custom
+  formatters — e.g. `mjr.pretty = false` under `[behave.userdata]` or
+  `-D mjr.pretty=false` on the CLI.
+- **`context.attach()` data was dropped**: neither formatter implemented
+  `embedding()`, the Behave callback that delivers attachments.
+- **Attachments/logs reached only the first formatter**: with two compatible
+  formatters active (e.g. `behave.ini` + `--format`), the second report lost
+  every attachment and log. Helpers now broadcast to all of them.
+- **`after_step` attachments bound to the wrong step**: Behave runs the hook
+  after the `result()` event, so buffered items landed on the next step.
+  Pending items are now flushed to the step that just finished.
+- **Background inheritance**: rule scenarios lost feature-background steps;
+  the effective background (feature + rule) is now built per scenario.
+- **Cucumber element order**: rule scenarios were emitted before top-level
+  scenarios regardless of document order.
+- **Cucumber embeddings**: external attachment references emitted the file
+  path as embedded `data`; external refs without content are now skipped.
+- **`eof()` in programmatic use closed the formatter**: features sent after
+  the first `eof()` were silently dropped. New events reopen the formatter
+  and rewrite the stream in place when possible.
+- **`mjr.environment_extra` crashed `finalize()`** when it arrived as a
+  string from userdata; JSON object strings are now parsed.
+- **`gitRemote` leaked credentials**: remote URLs like
+  `https://user:token@host/repo` are sanitized before entering the report.
+- **Status normalization** covered only the canonical vocabulary; Behave's
+  `pending_warn`, `untested_*`, `executing` and `unknown` now map correctly.
+- **Non-numeric locations** (`line="abc"`, missing attributes) no longer
+  crash `_location` or produce schema-invalid `feature.line` values.
+- **`NaN`/`Infinity` durations** produced invalid JSON; non-finite floats are
+  sanitized and clamped, and duration checks use `is not None` so genuine
+  `0.0` values are kept.
+- **`_pending` buffer discarded**: attachments/logs created after the last
+  step (e.g. `after_all`) were silently dropped; they are now bound to the
+  final step of the run.
+- **Structural validator** accepted `bool` as a number, skipped the status
+  enum and ignored NaN/non-array `rules`; it is now closer to the bundled
+  JSON Schema.
+- **`compute_statistics`** ignored scenarios that only lived in
+  `rule.scenarios` (hand-built models) and counted error/undefined/pending
+  steps as non-passing in `passRate`.
+- **Serializer hardening**: `serialize(None)` crashed with `AttributeError`,
+  `None` collection fields exploded during iteration, required model fields
+  raise `TypeError`, and cyclic metadata no longer recurses forever.
+- **Attachment broadcast resilience**: one hostile formatter no longer
+  starves the others, and duplicate formatter instances don't receive
+  duplicate attachments.
+
+### Added
+
+- `behave_modern_json_report/py.typed` so type checkers use the inline
+  annotations.
+- `ValidationError` is now exported at package level.
+- `mjr.metadata` (JSON object string) merges extra keys into report
+  `metadata`.
+
 ## [1.3.0] - 2026-10-03
 
 ### Fixed
